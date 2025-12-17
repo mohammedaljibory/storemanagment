@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../services/fcm_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -47,6 +48,10 @@ class AuthProvider extends ChangeNotifier {
             data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
           }
           _user = UserModel.fromJson(data);
+
+          // Register FCM token for push notifications
+          await _registerFCMToken();
+
           _isLoading = false;
           notifyListeners();
           return true;
@@ -239,9 +244,35 @@ class AuthProvider extends ChangeNotifier {
 
   /// Logout
   Future<void> logout() async {
+    // Unregister FCM token before logout
+    if (_user != null) {
+      await FCMService.unregisterToken(_user!.id);
+    }
     await _auth.signOut();
     _user = null;
     notifyListeners();
+  }
+
+  /// Register FCM token for push notifications
+  Future<void> _registerFCMToken() async {
+    if (_user == null) return;
+
+    try {
+      // Register device token
+      await FCMService.registerToken(_user!.id);
+
+      // Subscribe to relevant topics based on role
+      if (_user!.isAdmin) {
+        await FCMService.subscribeToAdminNotifications();
+      }
+
+      // Subscribe to store notifications if user has a store
+      if (_user!.storeId != null) {
+        await FCMService.subscribeToStore(_user!.storeId!);
+      }
+    } catch (e) {
+      print('Error registering FCM token: $e');
+    }
   }
 
   /// Get route based on user role
@@ -270,6 +301,10 @@ class AuthProvider extends ChangeNotifier {
             data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
           }
           _user = UserModel.fromJson(data);
+
+          // Register FCM token for push notifications
+          await _registerFCMToken();
+
           notifyListeners();
           return true;
         }

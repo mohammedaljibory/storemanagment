@@ -23,6 +23,7 @@ dependencies:
   firebase_auth: ^6.1.2
   cloud_firestore: ^6.1.0
   firebase_storage: ^13.0.4
+  firebase_messaging: ^15.2.5
   google_maps_flutter: ^2.14.0
 
   # State Management

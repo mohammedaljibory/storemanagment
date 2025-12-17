@@ -18,6 +18,7 @@ import 'core/routes/app_routes.dart';
 import 'features/splash/screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/fcm_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,11 +35,14 @@ void main() async {
   // Initialize Firebase
   await Firebase.initializeApp();
   
-  // Initialize notifications
+  // Initialize local notifications
   await NotificationService.init();
-  
+
   // Request notification permissions
   await NotificationService.requestPermissions();
+
+  // Initialize FCM for push notifications
+  await FCMService.init();
 
   // await FirebaseSeeder.seedAll();
   runApp(MyApp(prefs: prefs));

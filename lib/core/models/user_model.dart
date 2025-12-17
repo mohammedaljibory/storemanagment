@@ -23,6 +23,9 @@ class UserModel {
   final DateTime? temporaryShiftDate;  // The date this temporary shift applies to
   final DateTime? temporaryShiftExpiry; // When the temporary assignment expires
 
+  // FCM Push Notification tokens (supports multiple devices)
+  final List<String> fcmTokens;
+
   UserModel({
     required this.id,
     required this.name,
@@ -41,6 +44,7 @@ class UserModel {
     this.temporaryShiftName,
     this.temporaryShiftDate,
     this.temporaryShiftExpiry,
+    this.fcmTokens = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -62,6 +66,7 @@ class UserModel {
       temporaryShiftName: json['temporaryShiftName'] as String?,
       temporaryShiftDate: _parseDateTimeNullable(json['temporaryShiftDate']),
       temporaryShiftExpiry: _parseDateTimeNullable(json['temporaryShiftExpiry']),
+      fcmTokens: _parseStringList(json['fcmTokens']),
     );
   }
 
@@ -105,20 +110,29 @@ class UserModel {
   /// Parse nullable DateTime
   static DateTime? _parseDateTimeNullable(dynamic value) {
     if (value == null) return null;
-    
+
     if (value is Timestamp) {
       return value.toDate();
     }
-    
+
     if (value is String) {
       return DateTime.tryParse(value);
     }
-    
+
     if (value is DateTime) {
       return value;
     }
-    
+
     return null;
+  }
+
+  /// Parse list of strings (for FCM tokens)
+  static List<String> _parseStringList(dynamic value) {
+    if (value == null) return [];
+    if (value is List) {
+      return value.map((e) => e.toString()).toList();
+    }
+    return [];
   }
 
   Map<String, dynamic> toJson() {
@@ -140,6 +154,7 @@ class UserModel {
       'temporaryShiftName': temporaryShiftName,
       'temporaryShiftDate': temporaryShiftDate?.toIso8601String(),
       'temporaryShiftExpiry': temporaryShiftExpiry?.toIso8601String(),
+      'fcmTokens': fcmTokens,
     };
   }
 
@@ -161,6 +176,7 @@ class UserModel {
     String? temporaryShiftName,
     DateTime? temporaryShiftDate,
     DateTime? temporaryShiftExpiry,
+    List<String>? fcmTokens,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -180,6 +196,7 @@ class UserModel {
       temporaryShiftName: temporaryShiftName ?? this.temporaryShiftName,
       temporaryShiftDate: temporaryShiftDate ?? this.temporaryShiftDate,
       temporaryShiftExpiry: temporaryShiftExpiry ?? this.temporaryShiftExpiry,
+      fcmTokens: fcmTokens ?? this.fcmTokens,
     );
   }
 
@@ -203,6 +220,7 @@ class UserModel {
       temporaryShiftName: null,
       temporaryShiftDate: null,
       temporaryShiftExpiry: null,
+      fcmTokens: fcmTokens,
     );
   }
 
