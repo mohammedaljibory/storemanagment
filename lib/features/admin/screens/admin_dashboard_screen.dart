@@ -215,39 +215,39 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         crossAxisCount: 2,
         crossAxisSpacing: 15,
         mainAxisSpacing: 15,
-        childAspectRatio: 1.5,
+        childAspectRatio: 1.3, // Taller cards to prevent overflow
       ),
       itemCount: stats.length,
       itemBuilder: (context, index) {
         final stat = stats[index];
         return GlassContainer(
-          padding: const EdgeInsets.all(15),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: (stat['color'] as Color).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   stat['icon'] as IconData,
                   color: stat['color'] as Color,
-                  size: 24,
+                  size: 20,
                 ),
               ),
               Text(
                 stat['value'] as String,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: stat['color'] as Color,
                 ),
               ),
               Text(
                 stat['title'] as String,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Colors.grey,
                 ),
               ),

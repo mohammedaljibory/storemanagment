@@ -644,32 +644,42 @@ class AttendanceProvider extends ChangeNotifier {
   /// Fetch all employees who are currently checked in (for admin dashboard)
   Future<void> fetchActiveAttendance() async {
     try {
-      final now = DateTime.now();
-      // Extended to 7 days for testing - can reduce back to 1 day later
-      final startDate = DateTime(now.year, now.month, now.day - 7);
+      print('🔍 Fetching active attendance...');
 
-      print('🔍 Fetching active attendance from ${startDate.toIso8601String()}');
-
-      // Query for attendance records with no checkout (currently working)
+      // Fetch ALL attendance records (no date filter since checkIn might be string)
       final snapshot = await _firestore
           .collection('attendance')
-          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
           .get();
 
-      print('📊 Found ${snapshot.docs.length} attendance records');
+      print('📊 Found ${snapshot.docs.length} total attendance records');
 
-      // Debug: show raw checkOut values
+      final now = DateTime.now();
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+      final allRecords = <AttendanceModel>[];
+
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        print('   Record: ${data['userName']} - checkOut raw value: ${data['checkOut']} (type: ${data['checkOut'].runtimeType})');
+        data['id'] = doc.id;
+
+        // Debug raw values
+        print('   Record: ${data['userName']} - checkOut: ${data['checkOut']} (${data['checkOut'].runtimeType})');
+
+        _convertTimestamps(data);
+
+        try {
+          final attendance = AttendanceModel.fromJson(data);
+
+          // Filter by date in code (handles both string and Timestamp checkIn)
+          if (attendance.checkIn.isAfter(sevenDaysAgo)) {
+            allRecords.add(attendance);
+          }
+        } catch (e) {
+          print('   ⚠️ Error parsing record: $e');
+        }
       }
 
-      final allRecords = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        _convertTimestamps(data);
-        return AttendanceModel.fromJson(data);
-      }).toList();
+      print('📊 Records in last 7 days: ${allRecords.length}');
 
       _activeAttendance = allRecords.where((a) => a.checkOut == null).toList();
 
@@ -686,23 +696,31 @@ class AttendanceProvider extends ChangeNotifier {
 
   /// Stream of active attendance (real-time)
   Stream<List<AttendanceModel>> activeAttendanceStream() {
-    final now = DateTime.now();
-    // Extended to 7 days for testing - can reduce back to 1 day later
-    final startDate = DateTime(now.year, now.month, now.day - 7);
-
-    print('🔄 Creating active attendance stream from ${startDate.toIso8601String()}');
+    print('🔄 Creating active attendance stream...');
 
     return _firestore
         .collection('attendance')
-        .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
         .snapshots()
         .map((snapshot) {
-          final allRecords = snapshot.docs.map((doc) {
+          final now = DateTime.now();
+          final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+          final allRecords = <AttendanceModel>[];
+
+          for (var doc in snapshot.docs) {
             final data = doc.data();
             data['id'] = doc.id;
             _convertTimestamps(data);
-            return AttendanceModel.fromJson(data);
-          }).toList();
+
+            try {
+              final attendance = AttendanceModel.fromJson(data);
+              if (attendance.checkIn.isAfter(sevenDaysAgo)) {
+                allRecords.add(attendance);
+              }
+            } catch (e) {
+              // Skip invalid records
+            }
+          }
 
           final active = allRecords.where((a) => a.checkOut == null).toList();
 
