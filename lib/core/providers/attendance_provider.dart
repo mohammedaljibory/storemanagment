@@ -647,25 +647,33 @@ class AttendanceProvider extends ChangeNotifier {
       final now = DateTime.now();
       final startOfYesterday = DateTime(now.year, now.month, now.day - 1);
 
+      print('🔍 Fetching active attendance from ${startOfYesterday.toIso8601String()}');
+
       // Query for attendance records with no checkout (currently working)
       final snapshot = await _firestore
           .collection('attendance')
           .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfYesterday))
           .get();
 
-      _activeAttendance = snapshot.docs
-          .map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            _convertTimestamps(data);
-            return AttendanceModel.fromJson(data);
-          })
-          .where((a) => a.checkOut == null) // Filter only those still checked in
-          .toList();
+      print('📊 Found ${snapshot.docs.length} attendance records');
+
+      final allRecords = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        _convertTimestamps(data);
+        return AttendanceModel.fromJson(data);
+      }).toList();
+
+      _activeAttendance = allRecords.where((a) => a.checkOut == null).toList();
+
+      print('✅ Active employees (no checkout): ${_activeAttendance.length}');
+      for (var a in _activeAttendance) {
+        print('   - ${a.userName} at ${a.storeName}');
+      }
 
       notifyListeners();
     } catch (e) {
-      print('Error fetching active attendance: $e');
+      print('❌ Error fetching active attendance: $e');
     }
   }
 
@@ -674,18 +682,27 @@ class AttendanceProvider extends ChangeNotifier {
     final now = DateTime.now();
     final startOfYesterday = DateTime(now.year, now.month, now.day - 1);
 
+    print('🔄 Creating active attendance stream');
+
     return _firestore
         .collection('attendance')
         .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfYesterday))
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) {
-              final data = doc.data();
-              data['id'] = doc.id;
-              _convertTimestamps(data);
-              return AttendanceModel.fromJson(data);
-            })
-            .where((a) => a.checkOut == null)
-            .toList());
+        .map((snapshot) {
+          final allRecords = snapshot.docs.map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            _convertTimestamps(data);
+            return AttendanceModel.fromJson(data);
+          }).toList();
+
+          final active = allRecords.where((a) => a.checkOut == null).toList();
+
+          // Also update the local list for fallback
+          _activeAttendance = active;
+
+          print('🔄 Stream update: ${active.length} active employees');
+          return active;
+        });
   }
 }

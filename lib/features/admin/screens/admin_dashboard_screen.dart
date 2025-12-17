@@ -341,7 +341,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ).animate().fadeIn(delay: 400.ms, duration: 600.ms)
         else
           SizedBox(
-            height: 110,
+            height: 95,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: activeAttendance.length,
@@ -363,29 +363,31 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return GlassContainer(
       margin: EdgeInsets.only(left: index == 0 ? 0 : 10),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       child: SizedBox(
-        width: 140,
+        width: 130,
+        height: 70,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 6,
+                  height: 6,
                   decoration: const BoxDecoration(
                     color: AppTheme.successColor,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     attendance.userName,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -393,29 +395,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
             Text(
               attendance.storeName,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              style: const TextStyle(
                 color: Colors.grey,
-                fontSize: 11,
+                fontSize: 10,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const Spacer(),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.access_time, size: 12, color: AppTheme.secondaryColor),
+                    const Icon(Icons.access_time, size: 10, color: AppTheme.secondaryColor),
                     const SizedBox(width: 2),
                     Text(
                       '${hours}س ${minutes}د',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         color: AppTheme.secondaryColor,
                         fontWeight: FontWeight.bold,
                       ),
@@ -426,7 +426,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   '${checkInTime.hour.toString().padLeft(2, '0')}:${checkInTime.minute.toString().padLeft(2, '0')}',
                   style: const TextStyle(
                     color: Colors.grey,
-                    fontSize: 10,
+                    fontSize: 9,
                   ),
                 ),
               ],

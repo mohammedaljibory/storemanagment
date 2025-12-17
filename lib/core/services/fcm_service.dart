@@ -80,40 +80,35 @@ class FCMService {
   /// Get FCM token for this device (with iOS APNS retry)
   static Future<String?> getToken() async {
     try {
-      // On iOS, wait for APNS token first
+      // On iOS, APNS token may not be available immediately (especially on simulators)
       if (Platform.isIOS) {
-        String? apnsToken;
-        int retries = 0;
-        const maxRetries = 5;
-
-        while (apnsToken == null && retries < maxRetries) {
-          try {
+        try {
+          // Try to get APNS token with shorter timeout
+          String? apnsToken;
+          for (int i = 0; i < 3; i++) {
             apnsToken = await _messaging.getAPNSToken();
-            if (apnsToken == null) {
-              retries++;
-              print('📱 Waiting for APNS token (attempt $retries/$maxRetries)...');
-              await Future.delayed(Duration(seconds: retries * 2)); // Exponential backoff
-            }
-          } catch (e) {
-            retries++;
-            print('⚠️ APNS token not ready, retrying... ($retries/$maxRetries)');
-            await Future.delayed(Duration(seconds: retries * 2));
+            if (apnsToken != null) break;
+            await Future.delayed(const Duration(seconds: 1));
           }
-        }
 
-        if (apnsToken == null) {
-          print('⚠️ APNS token not available after $maxRetries attempts');
-          // Continue anyway - FCM token might still work
+          if (apnsToken == null) {
+            print('⚠️ APNS token not available - FCM may not work on this iOS device');
+            // On iOS simulator or without proper APNS setup, skip FCM
+            return null;
+          }
+        } catch (e) {
+          print('⚠️ APNS not configured: $e');
+          return null;
         }
       }
 
       final token = await _messaging.getToken();
       if (token != null) {
-        print('📱 FCM Token: ${token.substring(0, 20)}...');
+        print('📱 FCM Token obtained successfully');
       }
       return token;
     } catch (e) {
-      print('❌ Error getting FCM token: $e');
+      print('⚠️ FCM token unavailable (this is OK on simulators): $e');
       return null;
     }
   }
@@ -124,7 +119,8 @@ class FCMService {
 
     final token = await getToken();
     if (token == null) {
-      print('❌ Cannot register: No FCM token');
+      // This is normal on iOS simulators - just skip registration
+      print('ℹ️ FCM registration skipped (no token available)');
       return;
     }
 
