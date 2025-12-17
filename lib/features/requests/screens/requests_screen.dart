@@ -41,7 +41,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
   }
 
   void _goBack() {
-    if (!_isDisposed && mounted) {
+    if (!_isDisposed && mounted && Navigator.canPop(context)) {
       Navigator.of(context).pop();
     }
   }
