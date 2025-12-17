@@ -681,9 +681,20 @@ class AttendanceProvider extends ChangeNotifier {
 
       print('📊 Records in last 7 days: ${allRecords.length}');
 
-      _activeAttendance = allRecords.where((a) => a.checkOut == null).toList();
+      // Filter only those with no checkout
+      final activeRecords = allRecords.where((a) => a.checkOut == null).toList();
 
-      print('✅ Active employees (no checkout): ${_activeAttendance.length}');
+      // Remove duplicates - keep only most recent check-in per employee
+      final Map<String, AttendanceModel> uniqueByUser = {};
+      for (var record in activeRecords) {
+        if (!uniqueByUser.containsKey(record.userId) ||
+            record.checkIn.isAfter(uniqueByUser[record.userId]!.checkIn)) {
+          uniqueByUser[record.userId] = record;
+        }
+      }
+      _activeAttendance = uniqueByUser.values.toList();
+
+      print('✅ Active employees (unique): ${_activeAttendance.length}');
       for (var a in _activeAttendance) {
         print('   - ${a.userName} at ${a.storeName}');
       }
@@ -722,7 +733,18 @@ class AttendanceProvider extends ChangeNotifier {
             }
           }
 
-          final active = allRecords.where((a) => a.checkOut == null).toList();
+          // Filter only those with no checkout
+          final activeRecords = allRecords.where((a) => a.checkOut == null).toList();
+
+          // Remove duplicates - keep only most recent check-in per employee
+          final Map<String, AttendanceModel> uniqueByUser = {};
+          for (var record in activeRecords) {
+            if (!uniqueByUser.containsKey(record.userId) ||
+                record.checkIn.isAfter(uniqueByUser[record.userId]!.checkIn)) {
+              uniqueByUser[record.userId] = record;
+            }
+          }
+          final active = uniqueByUser.values.toList();
 
           // Also update the local list for fallback
           _activeAttendance = active;
