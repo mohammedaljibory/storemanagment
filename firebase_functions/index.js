@@ -95,12 +95,12 @@ exports.onTaskUpdated = functions.firestore
       console.log(`Task status changed: ${before.status} -> ${after.status}`);
 
       // Task waiting approval -> notify admins
-      if (after.status === "waiting_approval") {
+      if (after.status === "waitingApproval" || after.status === "waiting_approval") {
         return notifyAdminsTaskWaitingApproval(taskId, after);
       }
 
       // Task approved -> notify assigned employees
-      if (after.status === "completed" && before.status === "waiting_approval") {
+      if (after.status === "completed" && (before.status === "waitingApproval" || before.status === "waiting_approval")) {
         return notifyEmployeesTaskApproved(taskId, after);
       }
 
@@ -505,6 +505,80 @@ function getRequestTypeArabic(type) {
   };
   return types[type] || "طلب";
 }
+
+// ============================================
+// NOTIFICATIONS COLLECTION LISTENER
+// ============================================
+
+/**
+ * Listen to notifications collection and send push notifications
+ * This handles: check-in, check-out, location alerts, etc.
+ */
+exports.onNotificationCreated = functions.firestore
+    .document("notifications/{notificationId}")
+    .onCreate(async (snapshot, context) => {
+      const notification = snapshot.data();
+      const notificationId = context.params.notificationId;
+
+      console.log(`New notification created: ${notificationId}`, notification);
+
+      // Only process admin notifications
+      if (!notification.forAdmin) {
+        console.log("Not an admin notification, skipping");
+        return null;
+      }
+
+      // Get admin tokens
+      const adminTokens = await getAdminTokens();
+      if (adminTokens.length === 0) {
+        console.log("No admin tokens found");
+        return null;
+      }
+
+      // Determine channel based on notification type
+      let channelId = "store_channel";
+      const type = notification.type || "";
+
+      if (type.includes("checkin") || type.includes("checkout") || type === "employee_checkin" || type === "employee_checkout") {
+        channelId = "attendance_channel";
+      } else if (type.includes("location") || type === "location_alert") {
+        channelId = "location_alert";
+      } else if (type.includes("request") || type === "new_request") {
+        channelId = "request_channel";
+      } else if (type.includes("task")) {
+        channelId = "task_channel";
+      }
+
+      const message = {
+        notification: {
+          title: notification.title || "إشعار جديد",
+          body: notification.body || "",
+        },
+        data: {
+          type: type,
+          notificationId: notificationId,
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+        },
+        android: {
+          notification: {
+            channelId: channelId,
+            priority: type === "location_alert" ? "max" : "high",
+            defaultSound: true,
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
+        tokens: adminTokens,
+      };
+
+      return sendMulticastNotification(message, "onNotificationCreated");
+    });
 
 // ============================================
 // MANUAL NOTIFICATION FUNCTION (HTTP callable)
