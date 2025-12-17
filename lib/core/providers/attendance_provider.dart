@@ -9,6 +9,7 @@ import '../models/store_model.dart';
 import '../models/shift_model.dart';
 import '../models/user_model.dart';
 import '../services/notification_service.dart';
+import '../services/location_monitor_service.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -414,6 +415,28 @@ class AttendanceProvider extends ChangeNotifier {
       // 10. Notify check-in success
       NotificationService.notifyCheckInSuccess(shift.name, expectedEndTime);
 
+      // 11. Start location monitoring (alerts if employee moves away from store)
+      final savedAttendanceForMonitor = _todayAttendance ?? _currentSession;
+      if (savedAttendanceForMonitor != null) {
+        await LocationMonitorService.startMonitoring(
+          userId: userId,
+          userName: userName,
+          store: store,
+          attendance: savedAttendanceForMonitor,
+        );
+      }
+
+      // 12. Notify admin of check-in
+      await LocationMonitorService.notifyAdminOfCheckIn(
+        userId: userId,
+        userName: userName,
+        storeName: store.name,
+        storeId: store.id,
+        checkInTime: now,
+        isLate: checkInResult['isLate'] ?? false,
+        lateMinutes: checkInResult['lateMinutes'] ?? 0,
+      );
+
       _isLoading = false;
       notifyListeners();
       return true;
@@ -550,8 +573,22 @@ class AttendanceProvider extends ChangeNotifier {
       // Cancel sign-out reminders
       await NotificationService.cancelSignOutReminders();
 
+      // Stop location monitoring
+      LocationMonitorService.stopMonitoring();
+
       // Notify check-out success
       NotificationService.notifyCheckOutSuccess(totalHours);
+
+      // Notify admin of check-out
+      await LocationMonitorService.notifyAdminOfCheckOut(
+        userId: currentAttendance.userId,
+        userName: currentAttendance.userName,
+        storeName: currentAttendance.storeName,
+        storeId: currentAttendance.storeId,
+        totalHours: totalHours,
+        isEarlyLeave: isEarlyLeave,
+        earlyLeaveMinutes: earlyLeaveMinutes,
+      );
 
       _isLoading = false;
       notifyListeners();

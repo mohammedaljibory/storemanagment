@@ -123,16 +123,19 @@ class NotificationService {
     required String body,
     int id = 0,
     String? payload,
+    String? channelId,
+    String? channelName,
+    Importance importance = Importance.high,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      _defaultChannelId,
-      'Store Notifications',
-      importance: Importance.high,
-      priority: Priority.high,
+    final androidDetails = AndroidNotificationDetails(
+      channelId ?? _defaultChannelId,
+      channelName ?? 'Store Notifications',
+      importance: importance,
+      priority: importance == Importance.max ? Priority.max : Priority.high,
       icon: '@mipmap/ic_launcher',
     );
     const iosDetails = DarwinNotificationDetails();
-    const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
+    final details = NotificationDetails(android: androidDetails, iOS: iosDetails);
     await _notifications.show(id, title, body, details, payload: payload);
   }
 
