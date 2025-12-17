@@ -132,12 +132,19 @@ class RequestProvider extends ChangeNotifier {
       // Add to local list
       _requests.insert(0, newRequest);
 
-      // Notify admin
-      NotificationService.showNotification(
-        title: 'طلب جديد 📋',
-        body: '${request.employeeName} قدم طلب ${request.typeText}',
-        id: DateTime.now().millisecond,
-      );
+      // Notify admin - save to notifications collection for admin to receive
+      await _firestore.collection('notifications').add({
+        'type': 'new_request',
+        'title': 'طلب جديد 📋',
+        'body': '${request.employeeName} قدم طلب ${request.typeText}',
+        'employeeId': request.employeeId,
+        'employeeName': request.employeeName,
+        'requestId': docRef.id,
+        'requestType': request.type.toString().split('.').last,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
 
       _isLoading = false;
       notifyListeners();

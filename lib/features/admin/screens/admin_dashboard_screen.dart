@@ -11,6 +11,7 @@ import '../../../core/models/attendance_model.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/services/admin_notification_listener.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -26,12 +27,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _loadData();
+    // Start listening for admin notifications
+    AdminNotificationListener.startListening();
     // Create stream once in initState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
         _activeAttendanceStream = context.read<AttendanceProvider>().activeAttendanceStream();
       });
     });
+  }
+
+  @override
+  void dispose() {
+    // Don't stop listener here - keep it running while app is open
+    super.dispose();
   }
 
   Future<void> _loadData() async {

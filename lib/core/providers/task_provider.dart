@@ -243,7 +243,9 @@ class TaskProvider extends ChangeNotifier {
 
       // Update local list
       final index = _tasks.indexWhere((t) => t.id == taskId);
+      String taskTitle = '';
       if (index != -1) {
+        taskTitle = _tasks[index].title;
         _tasks[index] = _tasks[index].copyWith(
           status: TaskStatus.waitingApproval,
           completedAt: DateTime.now(),
@@ -253,6 +255,20 @@ class TaskProvider extends ChangeNotifier {
           completedByName: completedByName,
         );
       }
+
+      // Notify admin about task waiting approval
+      await _firestore.collection('notifications').add({
+        'type': 'task_waiting_approval',
+        'title': 'مهمة تنتظر الموافقة ⏳',
+        'body': '$completedByName أنجز مهمة "$taskTitle" وتنتظر موافقتك',
+        'taskId': taskId,
+        'taskTitle': taskTitle,
+        'employeeId': completedById,
+        'employeeName': completedByName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
 
       _isLoading = false;
       notifyListeners();
