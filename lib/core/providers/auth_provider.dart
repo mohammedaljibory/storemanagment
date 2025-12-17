@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -49,8 +50,8 @@ class AuthProvider extends ChangeNotifier {
           }
           _user = UserModel.fromJson(data);
 
-          // Register FCM token for push notifications
-          await _registerFCMToken();
+          // Register FCM token for push notifications (deferred)
+          _registerFCMToken();
 
           _isLoading = false;
           notifyListeners();
@@ -253,26 +254,29 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Register FCM token for push notifications
-  Future<void> _registerFCMToken() async {
+  /// Register FCM token for push notifications (deferred to avoid build conflicts)
+  void _registerFCMToken() {
     if (_user == null) return;
 
-    try {
-      // Register device token
-      await FCMService.registerToken(_user!.id);
+    // Defer FCM registration to avoid setState during build
+    SchedulerBinding.instance.addPostFrameCallback((_) async {
+      try {
+        // Register device token
+        await FCMService.registerToken(_user!.id);
 
-      // Subscribe to relevant topics based on role
-      if (_user!.isAdmin) {
-        await FCMService.subscribeToAdminNotifications();
-      }
+        // Subscribe to relevant topics based on role
+        if (_user!.isAdmin) {
+          await FCMService.subscribeToAdminNotifications();
+        }
 
-      // Subscribe to store notifications if user has a store
-      if (_user!.storeId != null) {
-        await FCMService.subscribeToStore(_user!.storeId!);
+        // Subscribe to store notifications if user has a store
+        if (_user!.storeId != null) {
+          await FCMService.subscribeToStore(_user!.storeId!);
+        }
+      } catch (e) {
+        print('Error registering FCM token: $e');
       }
-    } catch (e) {
-      print('Error registering FCM token: $e');
-    }
+    });
   }
 
   /// Get route based on user role
@@ -302,8 +306,8 @@ class AuthProvider extends ChangeNotifier {
           }
           _user = UserModel.fromJson(data);
 
-          // Register FCM token for push notifications
-          await _registerFCMToken();
+          // Register FCM token for push notifications (deferred)
+          _registerFCMToken();
 
           notifyListeners();
           return true;

@@ -17,12 +17,21 @@ class RequestsScreen extends StatefulWidget {
 class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isDisposed = false;
+  bool _isEmbedded = false; // True when used as a tab
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _loadData();
+    // Check if this screen is embedded in a tab (no route to pop)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() {
+          _isEmbedded = !Navigator.canPop(context);
+        });
+      }
+    });
   }
 
   @override
@@ -69,20 +78,23 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                 padding: const EdgeInsets.all(20),
                 child: Row(
                   children: [
-                    IconButton(
-                      onPressed: _goBack,
-                      icon: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isDarkMode
-                              ? Colors.white.withOpacity(0.1)
-                              : Colors.black.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
+                    // Only show back button when not embedded as a tab
+                    if (!_isEmbedded) ...[
+                      IconButton(
+                        onPressed: _goBack,
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isDarkMode
+                                ? Colors.white.withOpacity(0.1)
+                                : Colors.black.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.arrow_back),
                         ),
-                        child: const Icon(Icons.arrow_back),
                       ),
-                    ),
-                    const SizedBox(width: 10),
+                      const SizedBox(width: 10),
+                    ],
                     Text(
                       'الطلبات',
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(

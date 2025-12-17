@@ -20,10 +20,18 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  Stream<List<AttendanceModel>>? _activeAttendanceStream;
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    // Create stream once in initState
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _activeAttendanceStream = context.read<AttendanceProvider>().activeAttendanceStream();
+      });
+    });
   }
 
   Future<void> _loadData() async {
@@ -253,86 +261,97 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildActiveEmployeesSection(BuildContext context) {
-    return StreamBuilder<List<AttendanceModel>>(
-      stream: context.read<AttendanceProvider>().activeAttendanceStream(),
-      builder: (context, snapshot) {
-        final activeAttendance = snapshot.data ?? [];
+    // Use cached stream or fallback to provider's fetched data
+    if (_activeAttendanceStream == null) {
+      // Show data from the initial fetch while stream is being set up
+      final attendanceProvider = context.watch<AttendanceProvider>();
+      final activeAttendance = attendanceProvider.activeAttendance;
+      return _buildActiveEmployeesContent(context, activeAttendance);
+    }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return StreamBuilder<List<AttendanceModel>>(
+      stream: _activeAttendanceStream,
+      builder: (context, snapshot) {
+        final activeAttendance = snapshot.data ?? context.read<AttendanceProvider>().activeAttendance;
+        return _buildActiveEmployeesContent(context, activeAttendance);
+      },
+    );
+  }
+
+  Widget _buildActiveEmployeesContent(BuildContext context, List<AttendanceModel> activeAttendance) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.successColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.person_pin_circle, color: AppTheme.successColor),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'الموظفون النشطون الآن',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.successColor,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${activeAttendance.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
-            const SizedBox(height: 15),
-            if (activeAttendance.isEmpty)
-              GlassContainer(
-                padding: const EdgeInsets.all(30),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.person_off,
-                        size: 50,
-                        color: Colors.grey.withOpacity(0.5),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'لا يوجد موظفون نشطون حالياً',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ).animate().fadeIn(delay: 400.ms, duration: 600.ms)
-            else
-              SizedBox(
-                height: 120,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: activeAttendance.length,
-                  itemBuilder: (context, index) {
-                    final attendance = activeAttendance[index];
-                    return _buildActiveEmployeeCard(context, attendance, index);
-                  },
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.successColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.person_pin_circle, color: AppTheme.successColor),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'الموظفون النشطون الآن',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.successColor,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${activeAttendance.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
+            ),
           ],
-        );
-      },
+        ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+        const SizedBox(height: 15),
+        if (activeAttendance.isEmpty)
+          GlassContainer(
+            padding: const EdgeInsets.all(30),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.person_off,
+                    size: 50,
+                    color: Colors.grey.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'لا يوجد موظفون نشطون حالياً',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ).animate().fadeIn(delay: 400.ms, duration: 600.ms)
+        else
+          SizedBox(
+            height: 110,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: activeAttendance.length,
+              itemBuilder: (context, index) {
+                final attendance = activeAttendance[index];
+                return _buildActiveEmployeeCard(context, attendance, index);
+              },
+            ),
+          ),
+      ],
     );
   }
 
@@ -344,28 +363,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
     return GlassContainer(
       margin: EdgeInsets.only(left: index == 0 ? 0 : 10),
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(12),
       child: SizedBox(
-        width: 150,
+        width: 140,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
                 Container(
-                  width: 10,
-                  height: 10,
+                  width: 8,
+                  height: 8,
                   decoration: const BoxDecoration(
                     color: AppTheme.successColor,
                     shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     attendance.userName,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
                     maxLines: 1,
@@ -374,34 +393,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 4),
             Text(
               attendance.storeName,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey,
+                fontSize: 11,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
+            const Spacer(),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(Icons.access_time, size: 14, color: AppTheme.secondaryColor),
-                const SizedBox(width: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.access_time, size: 12, color: AppTheme.secondaryColor),
+                    const SizedBox(width: 2),
+                    Text(
+                      '${hours}س ${minutes}د',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.secondaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
                 Text(
-                  '${hours}س ${minutes}د',
+                  '${checkInTime.hour.toString().padLeft(2, '0')}:${checkInTime.minute.toString().padLeft(2, '0')}',
                   style: const TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.secondaryColor,
-                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                    fontSize: 10,
                   ),
                 ),
               ],
-            ),
-            Text(
-              'منذ ${checkInTime.hour.toString().padLeft(2, '0')}:${checkInTime.minute.toString().padLeft(2, '0')}',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey,
-                fontSize: 10,
-              ),
             ),
           ],
         ),

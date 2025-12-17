@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -76,11 +77,40 @@ class FCMService {
     return granted;
   }
 
-  /// Get FCM token for this device
+  /// Get FCM token for this device (with iOS APNS retry)
   static Future<String?> getToken() async {
     try {
+      // On iOS, wait for APNS token first
+      if (Platform.isIOS) {
+        String? apnsToken;
+        int retries = 0;
+        const maxRetries = 5;
+
+        while (apnsToken == null && retries < maxRetries) {
+          try {
+            apnsToken = await _messaging.getAPNSToken();
+            if (apnsToken == null) {
+              retries++;
+              print('📱 Waiting for APNS token (attempt $retries/$maxRetries)...');
+              await Future.delayed(Duration(seconds: retries * 2)); // Exponential backoff
+            }
+          } catch (e) {
+            retries++;
+            print('⚠️ APNS token not ready, retrying... ($retries/$maxRetries)');
+            await Future.delayed(Duration(seconds: retries * 2));
+          }
+        }
+
+        if (apnsToken == null) {
+          print('⚠️ APNS token not available after $maxRetries attempts');
+          // Continue anyway - FCM token might still work
+        }
+      }
+
       final token = await _messaging.getToken();
-      print('📱 FCM Token: ${token?.substring(0, 20)}...');
+      if (token != null) {
+        print('📱 FCM Token: ${token.substring(0, 20)}...');
+      }
       return token;
     } catch (e) {
       print('❌ Error getting FCM token: $e');
