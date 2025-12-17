@@ -645,17 +645,24 @@ class AttendanceProvider extends ChangeNotifier {
   Future<void> fetchActiveAttendance() async {
     try {
       final now = DateTime.now();
-      final startOfYesterday = DateTime(now.year, now.month, now.day - 1);
+      // Extended to 7 days for testing - can reduce back to 1 day later
+      final startDate = DateTime(now.year, now.month, now.day - 7);
 
-      print('🔍 Fetching active attendance from ${startOfYesterday.toIso8601String()}');
+      print('🔍 Fetching active attendance from ${startDate.toIso8601String()}');
 
       // Query for attendance records with no checkout (currently working)
       final snapshot = await _firestore
           .collection('attendance')
-          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfYesterday))
+          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
           .get();
 
       print('📊 Found ${snapshot.docs.length} attendance records');
+
+      // Debug: show raw checkOut values
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        print('   Record: ${data['userName']} - checkOut raw value: ${data['checkOut']} (type: ${data['checkOut'].runtimeType})');
+      }
 
       final allRecords = snapshot.docs.map((doc) {
         final data = doc.data();
@@ -680,13 +687,14 @@ class AttendanceProvider extends ChangeNotifier {
   /// Stream of active attendance (real-time)
   Stream<List<AttendanceModel>> activeAttendanceStream() {
     final now = DateTime.now();
-    final startOfYesterday = DateTime(now.year, now.month, now.day - 1);
+    // Extended to 7 days for testing - can reduce back to 1 day later
+    final startDate = DateTime(now.year, now.month, now.day - 7);
 
-    print('🔄 Creating active attendance stream');
+    print('🔄 Creating active attendance stream from ${startDate.toIso8601String()}');
 
     return _firestore
         .collection('attendance')
-        .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfYesterday))
+        .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
         .snapshots()
         .map((snapshot) {
           final allRecords = snapshot.docs.map((doc) {
