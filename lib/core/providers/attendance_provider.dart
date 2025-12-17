@@ -634,4 +634,58 @@ class AttendanceProvider extends ChangeNotifier {
               return AttendanceModel.fromJson(data);
             }).toList());
   }
+
+  // ============ ACTIVE EMPLOYEES (FOR ADMIN) ============
+
+  List<AttendanceModel> _activeAttendance = [];
+  List<AttendanceModel> get activeAttendance => [..._activeAttendance];
+  int get activeEmployeesCount => _activeAttendance.length;
+
+  /// Fetch all employees who are currently checked in (for admin dashboard)
+  Future<void> fetchActiveAttendance() async {
+    try {
+      final now = DateTime.now();
+      final startOfYesterday = DateTime(now.year, now.month, now.day - 1);
+
+      // Query for attendance records with no checkout (currently working)
+      final snapshot = await _firestore
+          .collection('attendance')
+          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfYesterday))
+          .get();
+
+      _activeAttendance = snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            _convertTimestamps(data);
+            return AttendanceModel.fromJson(data);
+          })
+          .where((a) => a.checkOut == null) // Filter only those still checked in
+          .toList();
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching active attendance: $e');
+    }
+  }
+
+  /// Stream of active attendance (real-time)
+  Stream<List<AttendanceModel>> activeAttendanceStream() {
+    final now = DateTime.now();
+    final startOfYesterday = DateTime(now.year, now.month, now.day - 1);
+
+    return _firestore
+        .collection('attendance')
+        .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfYesterday))
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((doc) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              _convertTimestamps(data);
+              return AttendanceModel.fromJson(data);
+            })
+            .where((a) => a.checkOut == null)
+            .toList());
+  }
 }

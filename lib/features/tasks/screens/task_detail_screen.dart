@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
@@ -355,19 +356,28 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             if (task.completionImage != null && task.completionImage!.isNotEmpty)
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(15),
-                                child: Image.network(
-                                  task.completionImage!,
+                                child: CachedNetworkImage(
+                                  imageUrl: task.completionImage!,
                                   height: 200,
                                   width: double.infinity,
                                   fit: BoxFit.cover,
-                                  loadingBuilder: (context, child, progress) {
-                                    if (progress == null) return child;
-                                    return Container(height: 200, color: Colors.grey.shade300,
-                                      child: const Center(child: CircularProgressIndicator()));
-                                  },
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    height: 200, color: Colors.grey.shade300,
-                                    child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey))),
+                                  placeholder: (context, url) => Container(
+                                    height: 200,
+                                    color: Colors.grey.shade300,
+                                    child: const Center(child: CircularProgressIndicator()),
+                                  ),
+                                  errorWidget: (context, url, error) => Container(
+                                    height: 200,
+                                    color: Colors.grey.shade300,
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                                        const SizedBox(height: 8),
+                                        Text('فشل في تحميل الصورة', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             if (task.completionNote != null && task.completionNote!.isNotEmpty) ...[
@@ -576,19 +586,28 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             const SizedBox(height: 15),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(15),
-                              child: Image.network(
-                                task.completionImage!,
+                              child: CachedNetworkImage(
+                                imageUrl: task.completionImage!,
                                 height: 200,
                                 width: double.infinity,
                                 fit: BoxFit.cover,
-                                loadingBuilder: (context, child, progress) {
-                                  if (progress == null) return child;
-                                  return Container(height: 200, color: Colors.grey.shade300,
-                                    child: const Center(child: CircularProgressIndicator()));
-                                },
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  height: 200, color: Colors.grey.shade300,
-                                  child: const Center(child: Icon(Icons.broken_image, size: 50, color: Colors.grey))),
+                                placeholder: (context, url) => Container(
+                                  height: 200,
+                                  color: Colors.grey.shade300,
+                                  child: const Center(child: CircularProgressIndicator()),
+                                ),
+                                errorWidget: (context, url, error) => Container(
+                                  height: 200,
+                                  color: Colors.grey.shade300,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                                      const SizedBox(height: 8),
+                                      Text('فشل في تحميل الصورة', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                             if (task.completionNote != null && task.completionNote!.isNotEmpty) ...[

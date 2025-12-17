@@ -56,72 +56,69 @@ class TaskProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      Query<Map<String, dynamic>> query = _firestore.collection('tasks');
+      List<TaskModel> allTasks = [];
 
-      // For employees, only fetch their assigned tasks
-      if (!isAdmin && userId != null) {
-        // Fetch tasks where user is in assignedToList OR is the primary assignedTo
-        query = query.where('assignedToList', arrayContains: userId);
-      }
-
-      final snapshot = await query.orderBy('createdAt', descending: true).get();
-
-      _tasks = snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        // Handle Timestamp fields
-        if (data['createdAt'] is Timestamp) {
-          data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
-        }
-        if (data['deadline'] is Timestamp) {
-          data['deadline'] = (data['deadline'] as Timestamp).toDate().toIso8601String();
-        }
-        if (data['startedAt'] is Timestamp) {
-          data['startedAt'] = (data['startedAt'] as Timestamp).toDate().toIso8601String();
-        }
-        if (data['completedAt'] is Timestamp) {
-          data['completedAt'] = (data['completedAt'] as Timestamp).toDate().toIso8601String();
-        }
-        if (data['approvedAt'] is Timestamp) {
-          data['approvedAt'] = (data['approvedAt'] as Timestamp).toDate().toIso8601String();
-        }
-        if (data['nextRepeatDate'] is Timestamp) {
-          data['nextRepeatDate'] = (data['nextRepeatDate'] as Timestamp).toDate().toIso8601String();
-        }
-        return TaskModel.fromJson(data);
-      }).toList();
-
-      // For employees, also fetch tasks where they are primary assignee (backup query)
-      if (!isAdmin && userId != null) {
-        final backupSnapshot = await _firestore
+      if (isAdmin) {
+        // Admin: fetch all tasks
+        final snapshot = await _firestore
             .collection('tasks')
-            .where('assignedTo', isEqualTo: userId)
+            .orderBy('createdAt', descending: true)
             .get();
-        
-        for (var doc in backupSnapshot.docs) {
-          if (!_tasks.any((t) => t.id == doc.id)) {
+
+        allTasks = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          _convertTaskTimestamps(data);
+          return TaskModel.fromJson(data);
+        }).toList();
+      } else if (userId != null) {
+        // Employee: fetch tasks assigned to them
+        // Query 1: Tasks where user is in assignedToList
+        try {
+          final listSnapshot = await _firestore
+              .collection('tasks')
+              .where('assignedToList', arrayContains: userId)
+              .get();
+
+          for (var doc in listSnapshot.docs) {
             final data = doc.data();
             data['id'] = doc.id;
-            if (data['createdAt'] is Timestamp) {
-              data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
-            }
-            if (data['deadline'] is Timestamp) {
-              data['deadline'] = (data['deadline'] as Timestamp).toDate().toIso8601String();
-            }
-            if (data['startedAt'] is Timestamp) {
-              data['startedAt'] = (data['startedAt'] as Timestamp).toDate().toIso8601String();
-            }
-            if (data['completedAt'] is Timestamp) {
-              data['completedAt'] = (data['completedAt'] as Timestamp).toDate().toIso8601String();
-            }
-            _tasks.add(TaskModel.fromJson(data));
+            _convertTaskTimestamps(data);
+            allTasks.add(TaskModel.fromJson(data));
           }
+        } catch (e) {
+          print('Error in assignedToList query: $e');
         }
+
+        // Query 2: Tasks where user is primary assignee (backup)
+        try {
+          final primarySnapshot = await _firestore
+              .collection('tasks')
+              .where('assignedTo', isEqualTo: userId)
+              .get();
+
+          for (var doc in primarySnapshot.docs) {
+            // Avoid duplicates
+            if (!allTasks.any((t) => t.id == doc.id)) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              _convertTaskTimestamps(data);
+              allTasks.add(TaskModel.fromJson(data));
+            }
+          }
+        } catch (e) {
+          print('Error in assignedTo query: $e');
+        }
+
+        // Sort by createdAt descending
+        allTasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       }
+
+      _tasks = allTasks;
 
       // Check for overdue tasks
       _checkOverdueTasks();
-      
+
       // Check for repeating tasks that need to be created
       await _checkAndCreateRepeatingTasks();
 
@@ -132,6 +129,28 @@ class TaskProvider extends ChangeNotifier {
       _errorMessage = 'فشل في جلب المهام: $e';
       notifyListeners();
       print('Error fetching tasks: $e');
+    }
+  }
+
+  /// Convert Firestore Timestamps to ISO strings
+  void _convertTaskTimestamps(Map<String, dynamic> data) {
+    if (data['createdAt'] is Timestamp) {
+      data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
+    }
+    if (data['deadline'] is Timestamp) {
+      data['deadline'] = (data['deadline'] as Timestamp).toDate().toIso8601String();
+    }
+    if (data['startedAt'] is Timestamp) {
+      data['startedAt'] = (data['startedAt'] as Timestamp).toDate().toIso8601String();
+    }
+    if (data['completedAt'] is Timestamp) {
+      data['completedAt'] = (data['completedAt'] as Timestamp).toDate().toIso8601String();
+    }
+    if (data['approvedAt'] is Timestamp) {
+      data['approvedAt'] = (data['approvedAt'] as Timestamp).toDate().toIso8601String();
+    }
+    if (data['nextRepeatDate'] is Timestamp) {
+      data['nextRepeatDate'] = (data['nextRepeatDate'] as Timestamp).toDate().toIso8601String();
     }
   }
 
@@ -569,16 +588,74 @@ class TaskProvider extends ChangeNotifier {
 
   /// Listen to tasks in real-time
   Stream<List<TaskModel>> tasksStream({String? userId, bool isAdmin = false}) {
-    Query<Map<String, dynamic>> query = _firestore.collection('tasks');
-
-    if (!isAdmin && userId != null) {
-      query = query.where('assignedToList', arrayContains: userId);
-    }
-
-    return query.snapshots().map((snapshot) => snapshot.docs.map((doc) {
+    if (isAdmin) {
+      return _firestore
+          .collection('tasks')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .map((snapshot) {
+        final tasks = snapshot.docs.map((doc) {
           final data = doc.data();
           data['id'] = doc.id;
+          _convertTaskTimestamps(data);
           return TaskModel.fromJson(data);
-        }).toList());
+        }).toList();
+
+        // Update local list
+        _tasks = tasks;
+        return tasks;
+      });
+    } else if (userId != null) {
+      // For employees, listen to tasks where they are assigned
+      return _firestore
+          .collection('tasks')
+          .where('assignedToList', arrayContains: userId)
+          .snapshots()
+          .asyncMap((snapshot) async {
+        List<TaskModel> tasks = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          _convertTaskTimestamps(data);
+          return TaskModel.fromJson(data);
+        }).toList();
+
+        // Also fetch primary assigned tasks
+        try {
+          final primarySnapshot = await _firestore
+              .collection('tasks')
+              .where('assignedTo', isEqualTo: userId)
+              .get();
+
+          for (var doc in primarySnapshot.docs) {
+            if (!tasks.any((t) => t.id == doc.id)) {
+              final data = doc.data();
+              data['id'] = doc.id;
+              _convertTaskTimestamps(data);
+              tasks.add(TaskModel.fromJson(data));
+            }
+          }
+        } catch (e) {
+          print('Error fetching primary tasks: $e');
+        }
+
+        // Sort by createdAt descending
+        tasks.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+        // Update local list
+        _tasks = tasks;
+        notifyListeners();
+        return tasks;
+      });
+    }
+
+    return const Stream.empty();
+  }
+
+  /// Start listening to real-time updates
+  void startListening({String? userId, bool isAdmin = false}) {
+    tasksStream(userId: userId, isAdmin: isAdmin).listen((tasks) {
+      _tasks = tasks;
+      notifyListeners();
+    });
   }
 }

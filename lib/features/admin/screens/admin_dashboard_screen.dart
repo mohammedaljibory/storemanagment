@@ -6,6 +6,8 @@ import '../../../core/providers/store_provider.dart';
 import '../../../core/providers/employee_provider.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/request_provider.dart';
+import '../../../core/providers/attendance_provider.dart';
+import '../../../core/models/attendance_model.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -30,7 +32,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       await context.read<StoreProvider>().fetchStores(authProvider.user!.id);
       await context.read<EmployeeProvider>().fetchEmployees();
       await context.read<TaskProvider>().fetchTasks();
-      await context.read<RequestProvider>().fetchAllRequests(); // NEW: Fetch requests
+      await context.read<RequestProvider>().fetchAllRequests();
+      await context.read<AttendanceProvider>().fetchActiveAttendance();
     }
   }
 
@@ -65,7 +68,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   // Quick Stats
                   _buildQuickStats(context),
                   const SizedBox(height: 25),
-                  
+
+                  // Active Employees Section
+                  _buildActiveEmployeesSection(context),
+                  const SizedBox(height: 25),
+
                   // Management Cards
                   _buildManagementSection(context),
                 ],
@@ -243,6 +250,165 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             .scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1));
       },
     );
+  }
+
+  Widget _buildActiveEmployeesSection(BuildContext context) {
+    return StreamBuilder<List<AttendanceModel>>(
+      stream: context.read<AttendanceProvider>().activeAttendanceStream(),
+      builder: (context, snapshot) {
+        final activeAttendance = snapshot.data ?? [];
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.person_pin_circle, color: AppTheme.successColor),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'الموظفون النشطون الآن',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${activeAttendance.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+            const SizedBox(height: 15),
+            if (activeAttendance.isEmpty)
+              GlassContainer(
+                padding: const EdgeInsets.all(30),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.person_off,
+                        size: 50,
+                        color: Colors.grey.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'لا يوجد موظفون نشطون حالياً',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ).animate().fadeIn(delay: 400.ms, duration: 600.ms)
+            else
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: activeAttendance.length,
+                  itemBuilder: (context, index) {
+                    final attendance = activeAttendance[index];
+                    return _buildActiveEmployeeCard(context, attendance, index);
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildActiveEmployeeCard(BuildContext context, AttendanceModel attendance, int index) {
+    final checkInTime = attendance.checkIn;
+    final duration = DateTime.now().difference(checkInTime);
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+
+    return GlassContainer(
+      margin: EdgeInsets.only(left: index == 0 ? 0 : 10),
+      padding: const EdgeInsets.all(15),
+      child: SizedBox(
+        width: 150,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.successColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    attendance.userName,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              attendance.storeName,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Row(
+              children: [
+                const Icon(Icons.access_time, size: 14, color: AppTheme.secondaryColor),
+                const SizedBox(width: 4),
+                Text(
+                  '${hours}س ${minutes}د',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.secondaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              'منذ ${checkInTime.hour.toString().padLeft(2, '0')}:${checkInTime.minute.toString().padLeft(2, '0')}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey,
+                fontSize: 10,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ).animate()
+        .fadeIn(delay: Duration(milliseconds: 400 + (index * 100)), duration: 600.ms)
+        .slideX(begin: 0.2, end: 0);
   }
 
   Widget _buildManagementSection(BuildContext context) {

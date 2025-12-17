@@ -36,7 +36,8 @@ class AppTheme {
     brightness: Brightness.light,
     primaryColor: primaryColor,
     scaffoldBackgroundColor: const Color(0xFFF5F5F5),
-    
+    fontFamily: GoogleFonts.tajawal().fontFamily,
+
     colorScheme: const ColorScheme.light(
       primary: primaryColor,
       secondary: secondaryColor,
@@ -45,7 +46,7 @@ class AppTheme {
       background: Color(0xFFF5F5F5),
       error: errorColor,
     ),
-    
+
     textTheme: TextTheme(
       displayLarge: GoogleFonts.tajawal(
         fontSize: 32,
@@ -167,7 +168,8 @@ class AppTheme {
     brightness: Brightness.dark,
     primaryColor: primaryColor,
     scaffoldBackgroundColor: const Color(0xFF0F0F1E),
-    
+    fontFamily: GoogleFonts.tajawal().fontFamily,
+
     colorScheme: const ColorScheme.dark(
       primary: primaryColor,
       secondary: secondaryColor,
@@ -176,7 +178,7 @@ class AppTheme {
       background: Color(0xFF0F0F1E),
       error: errorColor,
     ),
-    
+
     textTheme: TextTheme(
       displayLarge: GoogleFonts.tajawal(
         fontSize: 32,

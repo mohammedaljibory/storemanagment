@@ -384,4 +384,47 @@ class RequestProvider extends ChangeNotifier {
               return RequestModel.fromJson(data);
             }).toList());
   }
+
+  /// Stream of all requests (for admin real-time updates)
+  Stream<List<RequestModel>> allRequestsStream() {
+    return _firestore
+        .collection('requests')
+        .orderBy('requestDate', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      final requests = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        _convertTimestamps(data);
+        return RequestModel.fromJson(data);
+      }).toList();
+
+      // Update local list
+      _requests = requests;
+      notifyListeners();
+      return requests;
+    });
+  }
+
+  /// Stream of employee requests (for employee real-time updates)
+  Stream<List<RequestModel>> employeeRequestsStream(String employeeId) {
+    return _firestore
+        .collection('requests')
+        .where('employeeId', isEqualTo: employeeId)
+        .orderBy('requestDate', descending: true)
+        .snapshots()
+        .map((snapshot) {
+      final requests = snapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id;
+        _convertTimestamps(data);
+        return RequestModel.fromJson(data);
+      }).toList();
+
+      // Update local list
+      _requests = requests;
+      notifyListeners();
+      return requests;
+    });
+  }
 }

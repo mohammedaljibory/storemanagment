@@ -16,6 +16,7 @@ class RequestsScreen extends StatefulWidget {
 
 class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -26,14 +27,22 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _isDisposed = true;
     _tabController.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
+    if (_isDisposed) return;
     final authProvider = context.read<AuthProvider>();
     if (authProvider.user != null) {
       await context.read<RequestProvider>().fetchEmployeeRequests(authProvider.user!.id);
+    }
+  }
+
+  void _goBack() {
+    if (!_isDisposed && mounted) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -61,7 +70,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                 child: Row(
                   children: [
                     IconButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: _goBack,
                       icon: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(

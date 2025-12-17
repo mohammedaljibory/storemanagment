@@ -17,6 +17,7 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  Stream<List<TaskModel>>? _tasksStream;
 
   @override
   void initState() {
@@ -25,10 +26,24 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
+      final taskProvider = context.read<TaskProvider>();
+
+      // Set up real-time stream
       if (authProvider.isAdmin) {
-        context.read<TaskProvider>().fetchTasks(isAdmin: true);
+        _tasksStream = taskProvider.tasksStream(isAdmin: true);
       } else {
-        context.read<TaskProvider>().fetchTasks(
+        _tasksStream = taskProvider.tasksStream(
+          userId: authProvider.user!.id,
+          isAdmin: false,
+        );
+      }
+      setState(() {});
+
+      // Also do initial fetch
+      if (authProvider.isAdmin) {
+        taskProvider.fetchTasks(isAdmin: true);
+      } else {
+        taskProvider.fetchTasks(
           userId: authProvider.user!.id,
           isAdmin: false,
         );
@@ -137,25 +152,41 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
               const SizedBox(height: 20),
 
               Expanded(
-                child: Consumer<TaskProvider>(
-                  builder: (context, taskProvider, _) {
-                    if (taskProvider.isLoading) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    }
+                child: _tasksStream == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : StreamBuilder<List<TaskModel>>(
+                        stream: _tasksStream,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting &&
+                              !snapshot.hasData) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
 
-                    return TabBarView(
-                      controller: _tabController,
-                      children: [
-                        _buildTaskList(taskProvider.pendingTasks, TaskStatus.pending),
-                        _buildTaskList(taskProvider.inProgressTasks, TaskStatus.inProgress),
-                        _buildTaskList(taskProvider.waitingApprovalTasks, TaskStatus.waitingApproval),
-                        _buildTaskList(taskProvider.completedTasks, TaskStatus.completed),
-                      ],
-                    );
-                  },
-                ),
+                          final tasks = snapshot.data ?? [];
+                          final pendingTasks = tasks
+                              .where((t) => t.status == TaskStatus.pending)
+                              .toList();
+                          final inProgressTasks = tasks
+                              .where((t) => t.status == TaskStatus.inProgress)
+                              .toList();
+                          final waitingApprovalTasks = tasks
+                              .where((t) => t.status == TaskStatus.waitingApproval)
+                              .toList();
+                          final completedTasks = tasks
+                              .where((t) => t.status == TaskStatus.completed)
+                              .toList();
+
+                          return TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _buildTaskList(pendingTasks, TaskStatus.pending),
+                              _buildTaskList(inProgressTasks, TaskStatus.inProgress),
+                              _buildTaskList(waitingApprovalTasks, TaskStatus.waitingApproval),
+                              _buildTaskList(completedTasks, TaskStatus.completed),
+                            ],
+                          );
+                        },
+                      ),
               ),
             ],
           ),
