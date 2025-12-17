@@ -544,6 +544,48 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  /// Update task (for admin editing)
+  Future<bool> updateTask(TaskModel task) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Update in Firestore
+      await _firestore.collection('tasks').doc(task.id).update({
+        'title': task.title,
+        'description': task.description,
+        'storeId': task.storeId,
+        'storeName': task.storeName,
+        'assignedTo': task.assignedTo,
+        'assignedToName': task.assignedToName,
+        'assignedToList': task.assignedToList,
+        'assignedToNamesList': task.assignedToNamesList,
+        'deadline': task.deadline.toIso8601String(),
+        'maxDurationMinutes': task.maxDurationMinutes,
+        'priority': task.priority.toString().split('.').last,
+        'repeatType': task.repeatType.toString().split('.').last,
+        'isRepeating': task.isRepeating,
+        'nextRepeatDate': task.nextRepeatDate?.toIso8601String(),
+      });
+
+      // Update local list
+      final index = _tasks.indexWhere((t) => t.id == task.id);
+      if (index != -1) {
+        _tasks[index] = task;
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'فشل في تحديث المهمة: $e';
+      notifyListeners();
+      print('Error updating task: $e');
+      return false;
+    }
+  }
+
   /// Delete task
   Future<bool> deleteTask(String taskId) async {
     try {

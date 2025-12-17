@@ -6,9 +6,13 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/store_provider.dart';
+import '../../../core/providers/employee_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/models/task_model.dart';
+import '../../../core/models/store_model.dart';
+import '../../../core/models/user_model.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final String taskId;
@@ -205,6 +209,332 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
+  /// Show delete confirmation dialog
+  void _showDeleteConfirmDialog(TaskModel task) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('حذف المهمة'),
+        content: Text('هل أنت متأكد من حذف مهمة "${task.title}"؟\nلا يمكن التراجع عن هذا الإجراء.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final taskProvider = context.read<TaskProvider>();
+              final success = await taskProvider.deleteTask(task.id);
+              Navigator.pop(context); // Close dialog
+              if (success && mounted) {
+                Navigator.pop(context); // Go back from detail screen
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم حذف المهمة بنجاح'),
+                    backgroundColor: AppTheme.successColor,
+                  ),
+                );
+              } else if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(taskProvider.errorMessage ?? 'فشل في حذف المهمة'),
+                    backgroundColor: AppTheme.errorColor,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show edit task dialog
+  void _showEditTaskDialog(TaskModel task) {
+    final titleController = TextEditingController(text: task.title);
+    final descriptionController = TextEditingController(text: task.description);
+    DateTime selectedDeadline = task.deadline;
+    int maxDurationMinutes = task.maxDurationMinutes;
+    TaskPriority selectedPriority = task.priority;
+    TaskRepeatType selectedRepeatType = task.repeatType;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('تعديل المهمة'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'عنوان المهمة',
+                        prefixIcon: Icon(Icons.title),
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Description
+                    TextField(
+                      controller: descriptionController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'وصف المهمة',
+                        prefixIcon: Icon(Icons.description),
+                        alignLabelWithHint: true,
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Priority
+                    const Text('الأولوية:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: TaskPriority.values.map((priority) {
+                        return ChoiceChip(
+                          label: Text(_getPriorityText(priority)),
+                          selected: selectedPriority == priority,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() => selectedPriority = priority);
+                            }
+                          },
+                          selectedColor: _getPriorityColor(priority).withOpacity(0.3),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Duration
+                    const Text('المدة القصوى:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildDurationChipDialog(30, '30 دقيقة', maxDurationMinutes, (v) => setDialogState(() => maxDurationMinutes = v)),
+                        _buildDurationChipDialog(60, 'ساعة', maxDurationMinutes, (v) => setDialogState(() => maxDurationMinutes = v)),
+                        _buildDurationChipDialog(120, 'ساعتين', maxDurationMinutes, (v) => setDialogState(() => maxDurationMinutes = v)),
+                        _buildDurationChipDialog(180, '3 ساعات', maxDurationMinutes, (v) => setDialogState(() => maxDurationMinutes = v)),
+                        _buildDurationChipDialog(240, '4 ساعات', maxDurationMinutes, (v) => setDialogState(() => maxDurationMinutes = v)),
+                        _buildDurationChipDialog(480, '8 ساعات', maxDurationMinutes, (v) => setDialogState(() => maxDurationMinutes = v)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Deadline
+                    InkWell(
+                      onTap: () async {
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDeadline,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (date != null) {
+                          final time = await showTimePicker(
+                            context: context,
+                            initialTime: TimeOfDay.fromDateTime(selectedDeadline),
+                          );
+                          if (time != null) {
+                            setDialogState(() {
+                              selectedDeadline = DateTime(
+                                date.year, date.month, date.day,
+                                time.hour, time.minute,
+                              );
+                            });
+                          }
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(
+                          labelText: 'الموعد النهائي',
+                          prefixIcon: Icon(Icons.event),
+                          border: OutlineInputBorder(),
+                        ),
+                        child: Text(_formatDeadlineDialog(selectedDeadline)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Repeat
+                    const Text('تكرار المهمة:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: TaskRepeatType.values.map((repeatType) {
+                        return ChoiceChip(
+                          label: Text(_getRepeatText(repeatType)),
+                          selected: selectedRepeatType == repeatType,
+                          onSelected: (selected) {
+                            if (selected) {
+                              setDialogState(() => selectedRepeatType = repeatType);
+                            }
+                          },
+                          selectedColor: AppTheme.secondaryColor.withOpacity(0.3),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('إلغاء'),
+                ),
+                Consumer<TaskProvider>(
+                  builder: (context, taskProvider, _) {
+                    return ElevatedButton(
+                      onPressed: taskProvider.isLoading
+                          ? null
+                          : () async {
+                              if (titleController.text.isEmpty || descriptionController.text.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('يرجى ملء جميع الحقول'),
+                                    backgroundColor: AppTheme.warningColor,
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final updatedTask = task.copyWith(
+                                title: titleController.text,
+                                description: descriptionController.text,
+                                deadline: selectedDeadline,
+                                maxDurationMinutes: maxDurationMinutes,
+                                priority: selectedPriority,
+                                repeatType: selectedRepeatType,
+                                isRepeating: selectedRepeatType != TaskRepeatType.none,
+                                nextRepeatDate: selectedRepeatType != TaskRepeatType.none
+                                    ? _calculateNextRepeatDate(selectedDeadline, selectedRepeatType)
+                                    : null,
+                              );
+
+                              final success = await taskProvider.updateTask(updatedTask);
+                              Navigator.pop(context);
+
+                              if (success && mounted) {
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('تم تحديث المهمة بنجاح'),
+                                    backgroundColor: AppTheme.successColor,
+                                  ),
+                                );
+                              } else if (mounted) {
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(taskProvider.errorMessage ?? 'فشل في تحديث المهمة'),
+                                    backgroundColor: AppTheme.errorColor,
+                                  ),
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                      child: taskProvider.isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('حفظ التعديلات'),
+                    );
+                  },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDurationChipDialog(int minutes, String label, int currentValue, Function(int) onSelect) {
+    final isSelected = currentValue == minutes;
+    return GestureDetector(
+      onTap: () => onSelect(minutes),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.primaryColor.withOpacity(0.2) : Colors.transparent,
+          border: Border.all(color: isSelected ? AppTheme.primaryColor : Colors.grey),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? AppTheme.primaryColor : Colors.grey,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDeadlineDialog(DateTime deadline) {
+    return '${deadline.day}/${deadline.month}/${deadline.year} - '
+           '${deadline.hour.toString().padLeft(2, '0')}:${deadline.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _getPriorityText(TaskPriority priority) {
+    switch (priority) {
+      case TaskPriority.low: return 'منخفضة';
+      case TaskPriority.medium: return 'متوسطة';
+      case TaskPriority.high: return 'عالية';
+      case TaskPriority.urgent: return 'عاجلة';
+    }
+  }
+
+  Color _getPriorityColor(TaskPriority priority) {
+    switch (priority) {
+      case TaskPriority.low: return AppTheme.successColor;
+      case TaskPriority.medium: return AppTheme.secondaryColor;
+      case TaskPriority.high: return AppTheme.warningColor;
+      case TaskPriority.urgent: return AppTheme.errorColor;
+    }
+  }
+
+  String _getRepeatText(TaskRepeatType repeatType) {
+    switch (repeatType) {
+      case TaskRepeatType.none: return 'لا يتكرر';
+      case TaskRepeatType.daily: return 'يومياً';
+      case TaskRepeatType.weekly: return 'أسبوعياً';
+      case TaskRepeatType.monthly: return 'شهرياً';
+      case TaskRepeatType.yearly: return 'سنوياً';
+    }
+  }
+
+  DateTime? _calculateNextRepeatDate(DateTime deadline, TaskRepeatType repeatType) {
+    switch (repeatType) {
+      case TaskRepeatType.daily:
+        return deadline.add(const Duration(days: 1));
+      case TaskRepeatType.weekly:
+        return deadline.add(const Duration(days: 7));
+      case TaskRepeatType.monthly:
+        return DateTime(deadline.year, deadline.month + 1, deadline.day,
+            deadline.hour, deadline.minute);
+      case TaskRepeatType.yearly:
+        return DateTime(deadline.year + 1, deadline.month, deadline.day,
+            deadline.hour, deadline.minute);
+      case TaskRepeatType.none:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -243,7 +573,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           icon: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: isDarkMode 
+                              color: isDarkMode
                                   ? Colors.white.withOpacity(0.1)
                                   : Colors.black.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
@@ -253,6 +583,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                         ),
                         const Spacer(),
                         _buildPriorityBadge(task.priority),
+                        // Admin edit/delete buttons
+                        if (authProvider.isAdmin) ...[
+                          const SizedBox(width: 10),
+                          IconButton(
+                            onPressed: () => _showEditTaskDialog(task),
+                            icon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.edit, color: AppTheme.primaryColor, size: 20),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => _showDeleteConfirmDialog(task),
+                            icon: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.errorColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.delete, color: AppTheme.errorColor, size: 20),
+                            ),
+                          ),
+                        ],
                       ],
                     ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
 
