@@ -1,0 +1,93 @@
+name: store_management_app
+description: Store Management App with Gaming UI
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.7.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+    
+  # UI & Animations
+  cupertino_icons: ^1.0.6
+  google_fonts: ^6.1.0
+  flutter_animate: ^4.3.0
+  glassmorphism: ^3.0.0
+  shimmer: ^3.0.0
+  lottie: ^2.7.0
+  firebase_core: ^4.2.1
+  firebase_auth: ^6.1.2
+  cloud_firestore: ^6.1.0
+  firebase_storage: ^13.0.4
+  google_maps_flutter: ^2.14.0
+
+  # State Management
+  provider: ^6.1.1
+  
+  # Navigation
+  go_router: ^12.1.1
+  
+  # Firebase (for future integration)
+
+
+  # Location Services
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+  permission_handler: ^11.1.0
+  
+  # Image & Camera
+  image_picker: ^1.0.4
+  cached_network_image: ^3.3.0
+  
+  # Storage
+  shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
+  
+  # Utilities
+  intl: ^0.20.2
+  dio: ^5.4.0
+  flutter_svg: ^2.0.9
+  
+  # Charts & Analytics
+  fl_chart: ^0.65.0
+  
+  # Others
+  url_launcher: ^6.2.1
+  connectivity_plus: ^5.0.2
+  flutter_local_notifications: ^16.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+  flutter_launcher_icons: ^0.14.2
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#1A1A2E"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  min_sdk_android: 21
+  remove_alpha_ios: true
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/animations/
+    - assets/icon/
+    
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Regular.ttf
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Cairo-Light.ttf
+          weight: 300
