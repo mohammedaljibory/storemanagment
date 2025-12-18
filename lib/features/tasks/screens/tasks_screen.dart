@@ -22,7 +22,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);  // Changed to 4 tabs
+    _tabController = TabController(length: 5, vsync: this);  // 5 tabs including rejected
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
@@ -134,15 +134,12 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                   ),
                   labelColor: Colors.white,
                   unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
-                  tabs: [
-                    const Tab(text: 'في الانتظار'),
-                    const Tab(text: 'قيد التنفيذ'),
-                    // Show waiting approval tab for admin
-                    if (authProvider.isAdmin)
-                      const Tab(text: 'بانتظار الموافقة')
-                    else
-                      const Tab(text: 'بانتظار الموافقة'),
-                    const Tab(text: 'مكتملة'),
+                  tabs: const [
+                    Tab(text: 'في الانتظار'),
+                    Tab(text: 'قيد التنفيذ'),
+                    Tab(text: 'بانتظار الموافقة'),
+                    Tab(text: 'مرفوضة'),
+                    Tab(text: 'مكتملة'),
                   ],
                 ),
               ).animate()
@@ -172,6 +169,9 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                           final waitingApprovalTasks = tasks
                               .where((t) => t.status == TaskStatus.waitingApproval)
                               .toList();
+                          final rejectedTasks = tasks
+                              .where((t) => t.status == TaskStatus.rejected)
+                              .toList();
                           final completedTasks = tasks
                               .where((t) => t.status == TaskStatus.completed)
                               .toList();
@@ -182,6 +182,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                               _buildTaskList(pendingTasks, TaskStatus.pending),
                               _buildTaskList(inProgressTasks, TaskStatus.inProgress),
                               _buildTaskList(waitingApprovalTasks, TaskStatus.waitingApproval),
+                              _buildTaskList(rejectedTasks, TaskStatus.rejected),
                               _buildTaskList(completedTasks, TaskStatus.completed),
                             ],
                           );

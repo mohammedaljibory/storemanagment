@@ -207,12 +207,20 @@ class RequestProvider extends ChangeNotifier {
           endTime: approvedEndTime ?? _requests[index].endTime,
         );
 
-        // Notify employee
-        NotificationService.showNotification(
-          title: 'تمت الموافقة على طلبك ✅',
-          body: 'تمت الموافقة على ${_requests[index].typeText}',
-          id: DateTime.now().millisecond,
-        );
+        // Notify employee via Firestore (Cloud Function sends push)
+        await _firestore.collection('notifications').add({
+          'type': 'request_approved',
+          'title': 'تمت الموافقة على طلبك ✅',
+          'body': 'تمت الموافقة على ${_requests[index].typeText}',
+          'employeeId': _requests[index].employeeId,
+          'employeeName': _requests[index].employeeName,
+          'requestId': requestId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+          'forAdmin': false,
+          'forEmployee': true,
+          'targetUserId': _requests[index].employeeId,
+        });
       }
 
       _isLoading = false;
@@ -257,12 +265,21 @@ class RequestProvider extends ChangeNotifier {
           adminResponse: reason,
         );
 
-        // Notify employee
-        NotificationService.showNotification(
-          title: 'تم رفض طلبك ❌',
-          body: 'تم رفض ${_requests[index].typeText}: $reason',
-          id: DateTime.now().millisecond,
-        );
+        // Notify employee via Firestore (Cloud Function sends push)
+        await _firestore.collection('notifications').add({
+          'type': 'request_rejected',
+          'title': 'تم رفض طلبك ❌',
+          'body': 'تم رفض ${_requests[index].typeText}: $reason',
+          'employeeId': _requests[index].employeeId,
+          'employeeName': _requests[index].employeeName,
+          'requestId': requestId,
+          'reason': reason,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+          'forAdmin': false,
+          'forEmployee': true,
+          'targetUserId': _requests[index].employeeId,
+        });
       }
 
       _isLoading = false;

@@ -522,16 +522,25 @@ exports.onNotificationCreated = functions.firestore
 
       console.log(`New notification created: ${notificationId}`, notification);
 
-      // Only process admin notifications
-      if (!notification.forAdmin) {
-        console.log("Not an admin notification, skipping");
-        return null;
-      }
+      let tokens = [];
 
-      // Get admin tokens
-      const adminTokens = await getAdminTokens();
-      if (adminTokens.length === 0) {
-        console.log("No admin tokens found");
+      // Determine target: admin or specific employee
+      if (notification.forAdmin) {
+        // Get admin tokens
+        tokens = await getAdminTokens();
+        if (tokens.length === 0) {
+          console.log("No admin tokens found");
+          return null;
+        }
+      } else if (notification.forEmployee && notification.targetUserId) {
+        // Get specific employee tokens
+        tokens = await getTokensForUsers([notification.targetUserId]);
+        if (tokens.length === 0) {
+          console.log("No tokens found for employee: " + notification.targetUserId);
+          return null;
+        }
+      } else {
+        console.log("No target specified (forAdmin or forEmployee), skipping");
         return null;
       }
 
@@ -543,7 +552,7 @@ exports.onNotificationCreated = functions.firestore
         channelId = "attendance_channel";
       } else if (type.includes("location") || type === "location_alert") {
         channelId = "location_alert";
-      } else if (type.includes("request") || type === "new_request") {
+      } else if (type.includes("request")) {
         channelId = "request_channel";
       } else if (type.includes("task")) {
         channelId = "task_channel";
@@ -574,7 +583,7 @@ exports.onNotificationCreated = functions.firestore
             },
           },
         },
-        tokens: adminTokens,
+        tokens: tokens,
       };
 
       return sendMulticastNotification(message, "onNotificationCreated");

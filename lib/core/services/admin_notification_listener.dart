@@ -41,39 +41,13 @@ class AdminNotificationListener {
     });
   }
 
-  /// Handle new notification
+  /// Handle new notification - just log it, Cloud Function handles push
   static Future<void> _handleNewNotification(
       String docId, Map<String, dynamic> data) async {
-    // Check if notification is new (created after we started listening)
-    final createdAt = data['createdAt'];
-    if (createdAt != null && _startTime != null) {
-      DateTime notificationTime;
-      if (createdAt is Timestamp) {
-        notificationTime = createdAt.toDate();
-      } else {
-        return; // Skip if no valid timestamp
-      }
-
-      // Only show notifications created after we started listening
-      if (notificationTime.isBefore(_startTime!)) {
-        return;
-      }
-    }
-
-    final type = data['type'] ?? '';
+    // Don't show local notification - Cloud Function sends push to admin devices
+    // This listener is only for tracking/logging purposes
     final title = data['title'] ?? 'إشعار جديد';
-    final body = data['body'] ?? '';
-
-    // Show local notification
-    await NotificationService.showNotification(
-      id: docId.hashCode,
-      title: title,
-      body: body,
-      channelId: _getChannelId(type),
-      channelName: _getChannelName(type),
-    );
-
-    print('🔔 Admin notification shown: $title');
+    print('🔔 New admin notification received: $title (push sent via Cloud Function)');
   }
 
   static String _getChannelId(String type) {

@@ -328,10 +328,30 @@ class TaskProvider extends ChangeNotifier {
 
       final index = _tasks.indexWhere((t) => t.id == taskId);
       if (index != -1) {
-        _tasks[index] = _tasks[index].copyWith(
+        final task = _tasks[index];
+        _tasks[index] = task.copyWith(
           status: TaskStatus.rejected,
           rejectionReason: reason,
         );
+
+        // Notify employee who completed the task via Firestore
+        if (task.completedBy != null) {
+          await _firestore.collection('notifications').add({
+            'type': 'task_rejected',
+            'title': 'تم رفض المهمة ❌',
+            'body': 'تم رفض مهمة "${task.title}"\nالسبب: $reason',
+            'taskId': taskId,
+            'taskTitle': task.title,
+            'employeeId': task.completedBy,
+            'employeeName': task.completedByName,
+            'reason': reason,
+            'createdAt': FieldValue.serverTimestamp(),
+            'read': false,
+            'forAdmin': false,
+            'forEmployee': true,
+            'targetUserId': task.completedBy,
+          });
+        }
       }
 
       notifyListeners();
