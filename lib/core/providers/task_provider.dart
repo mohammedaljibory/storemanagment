@@ -256,19 +256,8 @@ class TaskProvider extends ChangeNotifier {
         );
       }
 
-      // Notify admin about task waiting approval
-      await _firestore.collection('notifications').add({
-        'type': 'task_waiting_approval',
-        'title': 'مهمة تنتظر الموافقة ⏳',
-        'body': '$completedByName أنجز مهمة "$taskTitle" وتنتظر موافقتك',
-        'taskId': taskId,
-        'taskTitle': taskTitle,
-        'employeeId': completedById,
-        'employeeName': completedByName,
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
-        'forAdmin': true,
-      });
+      // Note: Push notification to admin is handled by Cloud Function (onTaskUpdated)
+      // No need to create notification doc here - it would cause duplicate notifications
 
       _isLoading = false;
       notifyListeners();
@@ -334,24 +323,8 @@ class TaskProvider extends ChangeNotifier {
           rejectionReason: reason,
         );
 
-        // Notify employee who completed the task via Firestore
-        if (task.completedBy != null) {
-          await _firestore.collection('notifications').add({
-            'type': 'task_rejected',
-            'title': 'تم رفض المهمة ❌',
-            'body': 'تم رفض مهمة "${task.title}"\nالسبب: $reason',
-            'taskId': taskId,
-            'taskTitle': task.title,
-            'employeeId': task.completedBy,
-            'employeeName': task.completedByName,
-            'reason': reason,
-            'createdAt': FieldValue.serverTimestamp(),
-            'read': false,
-            'forAdmin': false,
-            'forEmployee': true,
-            'targetUserId': task.completedBy,
-          });
-        }
+        // Note: Push notification to employee is handled by Cloud Function (onTaskUpdated)
+        // No need to create notification doc here - it would cause duplicate notifications
       }
 
       notifyListeners();
