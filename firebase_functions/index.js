@@ -149,10 +149,18 @@ async function notifyAdminsTaskWaitingApproval(taskId, task) {
  * Notify employees when task is approved
  */
 async function notifyEmployeesTaskApproved(taskId, task) {
-  const assignedTo = task.assignedTo || [];
-  const tokens = await getTokensForUsers(assignedTo);
+  // Notify the employee who completed the task
+  const completedBy = task.completedBy;
+  if (!completedBy) {
+    console.log("No completedBy field, skipping notification");
+    return null;
+  }
 
-  if (tokens.length === 0) return null;
+  const tokens = await getTokensForUsers([completedBy]);
+  if (tokens.length === 0) {
+    console.log("No tokens found for employee who completed task");
+    return null;
+  }
 
   const message = {
     notification: {
@@ -171,6 +179,14 @@ async function notifyEmployeesTaskApproved(taskId, task) {
         priority: "high",
       },
     },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+          badge: 1,
+        },
+      },
+    },
     tokens: tokens,
   };
 
@@ -181,10 +197,18 @@ async function notifyEmployeesTaskApproved(taskId, task) {
  * Notify employees when task is rejected
  */
 async function notifyEmployeesTaskRejected(taskId, task) {
-  const assignedTo = task.assignedTo || [];
-  const tokens = await getTokensForUsers(assignedTo);
+  // Notify the employee who completed the task
+  const completedBy = task.completedBy;
+  if (!completedBy) {
+    console.log("No completedBy field, skipping notification");
+    return null;
+  }
 
-  if (tokens.length === 0) return null;
+  const tokens = await getTokensForUsers([completedBy]);
+  if (tokens.length === 0) {
+    console.log("No tokens found for employee who completed task");
+    return null;
+  }
 
   const rejectionReason = task.rejectionReason || "لم يتم تحديد السبب";
 
@@ -203,6 +227,14 @@ async function notifyEmployeesTaskRejected(taskId, task) {
       notification: {
         channelId: "task_channel",
         priority: "high",
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+          badge: 1,
+        },
       },
     },
     tokens: tokens,
@@ -317,6 +349,14 @@ exports.onRequestUpdated = functions.firestore
           notification: {
             channelId: "request_channel",
             priority: "high",
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default",
+              badge: 1,
+            },
           },
         },
         tokens: tokens,
