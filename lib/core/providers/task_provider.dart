@@ -256,8 +256,21 @@ class TaskProvider extends ChangeNotifier {
         );
       }
 
-      // Note: Push notification to admin is handled by Cloud Function (onTaskUpdated)
-      // No need to create notification doc here - it would cause duplicate notifications
+      // Save notification to Firestore for in-app notification list
+      // skipPush: true because Cloud Function (onTaskUpdated) already sends push
+      await _firestore.collection('notifications').add({
+        'type': 'task_waiting_approval',
+        'title': 'مهمة تنتظر الموافقة ⏳',
+        'body': '$completedByName أنجز مهمة "$taskTitle" وتنتظر موافقتك',
+        'taskId': taskId,
+        'taskTitle': taskTitle,
+        'employeeId': completedById,
+        'employeeName': completedByName,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+        'skipPush': true, // Cloud Function onTaskUpdated handles push
+      });
 
       _isLoading = false;
       notifyListeners();
@@ -323,8 +336,26 @@ class TaskProvider extends ChangeNotifier {
           rejectionReason: reason,
         );
 
-        // Note: Push notification to employee is handled by Cloud Function (onTaskUpdated)
-        // No need to create notification doc here - it would cause duplicate notifications
+        // Save notification to Firestore for in-app notification list
+        // skipPush: true because Cloud Function (onTaskUpdated) already sends push
+        if (task.completedBy != null) {
+          await _firestore.collection('notifications').add({
+            'type': 'task_rejected',
+            'title': 'تم رفض المهمة ❌',
+            'body': 'تم رفض مهمة "${task.title}"\nالسبب: $reason',
+            'taskId': taskId,
+            'taskTitle': task.title,
+            'employeeId': task.completedBy,
+            'employeeName': task.completedByName,
+            'reason': reason,
+            'createdAt': FieldValue.serverTimestamp(),
+            'read': false,
+            'forAdmin': false,
+            'forEmployee': true,
+            'targetUserId': task.completedBy,
+            'skipPush': true, // Cloud Function onTaskUpdated handles push
+          });
+        }
       }
 
       notifyListeners();

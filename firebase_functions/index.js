@@ -522,6 +522,13 @@ exports.onNotificationCreated = functions.firestore
 
       console.log(`New notification created: ${notificationId}`, notification);
 
+      // Skip push if another Cloud Function already handles it
+      // (e.g., onRequestCreated, onRequestUpdated, onTaskUpdated)
+      if (notification.skipPush === true) {
+        console.log("skipPush=true, notification doc created for history only, skipping push");
+        return null;
+      }
+
       let tokens = [];
 
       // Determine target: admin or specific employee

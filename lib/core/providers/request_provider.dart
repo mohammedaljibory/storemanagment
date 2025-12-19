@@ -131,8 +131,21 @@ class RequestProvider extends ChangeNotifier {
       // Add to local list
       _requests.insert(0, newRequest);
 
-      // Note: Push notification to admin is handled by Cloud Function (onRequestCreated)
-      // No need to create notification doc here - it would cause duplicate notifications
+      // Save notification to Firestore for in-app notification list
+      // skipPush: true because Cloud Function (onRequestCreated) already sends push
+      await _firestore.collection('notifications').add({
+        'type': 'new_request',
+        'title': 'طلب جديد 📋',
+        'body': '${request.employeeName} قدم طلب ${request.typeText}',
+        'employeeId': request.employeeId,
+        'employeeName': request.employeeName,
+        'requestId': docRef.id,
+        'requestType': request.type.toString().split('.').last,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+        'skipPush': true, // Cloud Function onRequestCreated handles push
+      });
 
       _isLoading = false;
       notifyListeners();
@@ -195,8 +208,22 @@ class RequestProvider extends ChangeNotifier {
           endTime: approvedEndTime ?? _requests[index].endTime,
         );
 
-        // Note: Push notification to employee is handled by Cloud Function (onRequestUpdated)
-        // No need to create notification doc here - it would cause duplicate notifications
+        // Save notification to Firestore for in-app notification list
+        // skipPush: true because Cloud Function (onRequestUpdated) already sends push
+        await _firestore.collection('notifications').add({
+          'type': 'request_approved',
+          'title': 'تمت الموافقة على طلبك ✅',
+          'body': 'تمت الموافقة على ${_requests[index].typeText}',
+          'employeeId': _requests[index].employeeId,
+          'employeeName': _requests[index].employeeName,
+          'requestId': requestId,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+          'forAdmin': false,
+          'forEmployee': true,
+          'targetUserId': _requests[index].employeeId,
+          'skipPush': true, // Cloud Function onRequestUpdated handles push
+        });
       }
 
       _isLoading = false;
@@ -241,8 +268,23 @@ class RequestProvider extends ChangeNotifier {
           adminResponse: reason,
         );
 
-        // Note: Push notification to employee is handled by Cloud Function (onRequestUpdated)
-        // No need to create notification doc here - it would cause duplicate notifications
+        // Save notification to Firestore for in-app notification list
+        // skipPush: true because Cloud Function (onRequestUpdated) already sends push
+        await _firestore.collection('notifications').add({
+          'type': 'request_rejected',
+          'title': 'تم رفض طلبك ❌',
+          'body': 'تم رفض ${_requests[index].typeText}: $reason',
+          'employeeId': _requests[index].employeeId,
+          'employeeName': _requests[index].employeeName,
+          'requestId': requestId,
+          'reason': reason,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+          'forAdmin': false,
+          'forEmployee': true,
+          'targetUserId': _requests[index].employeeId,
+          'skipPush': true, // Cloud Function onRequestUpdated handles push
+        });
       }
 
       _isLoading = false;
