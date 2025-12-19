@@ -416,12 +416,25 @@ class TaskProvider extends ChangeNotifier {
   Future<String> _uploadTaskImage(String taskId, String localPath) async {
     try {
       final file = File(localPath);
+
+      // Check if file exists
+      if (!await file.exists()) {
+        throw Exception('File does not exist: $localPath');
+      }
+
       final fileName = '${taskId}_${DateTime.now().millisecondsSinceEpoch}.jpg';
       final ref = _storage.ref().child('task_images').child(fileName);
-      
-      await ref.putFile(file);
+
+      // Add metadata for better compatibility
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {'taskId': taskId},
+      );
+
+      // Upload with metadata
+      await ref.putFile(file, metadata);
       final downloadUrl = await ref.getDownloadURL();
-      
+
       return downloadUrl;
     } catch (e) {
       print('Error uploading image: $e');
