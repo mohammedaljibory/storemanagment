@@ -27,15 +27,23 @@ exports.onTaskCreated = functions.firestore
 
       console.log(`New task created: ${taskId}`, task);
 
-      // Get assigned employees
-      const assignedTo = task.assignedTo || [];
-      if (assignedTo.length === 0) {
+      // Get assigned employees - check both assignedToList (array) and assignedTo (string)
+      let assignedEmployees = task.assignedToList || [];
+
+      // If assignedToList is empty, try assignedTo (might be single user ID)
+      if (assignedEmployees.length === 0 && task.assignedTo) {
+        assignedEmployees = [task.assignedTo];
+      }
+
+      if (assignedEmployees.length === 0) {
         console.log("No employees assigned to task");
         return null;
       }
 
+      console.log("Assigned employees:", assignedEmployees);
+
       // Get FCM tokens for all assigned employees
-      const tokens = await getTokensForUsers(assignedTo);
+      const tokens = await getTokensForUsers(assignedEmployees);
       if (tokens.length === 0) {
         console.log("No FCM tokens found for assigned employees");
         return null;
