@@ -61,6 +61,10 @@ dependencies:
   connectivity_plus: ^5.0.2
   flutter_local_notifications: ^16.2.0
 
+  # PDF Generation
+  pdf: ^3.10.8
+  printing: ^5.12.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

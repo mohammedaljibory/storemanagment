@@ -14,6 +14,9 @@ import '../../features/admin/screens/employees_screen.dart';
 import '../../features/admin/screens/employee_detail_screen.dart';
 import '../../features/requests/screens/requests_screen.dart' as req_screen;
 import '../../features/admin/screens/admin_requests_screen.dart';
+import '../../features/admin/screens/active_employees_by_store_screen.dart';
+import '../../features/admin/screens/tasks_by_employee_screen.dart';
+import '../../features/admin/screens/employee_report_screen.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -32,6 +35,9 @@ class AppRoutes {
   static const String employeeDetail = '/employee-detail';
   static const String requests = '/requests';
   static const String adminRequests = '/admin-requests';
+  static const String activeEmployeesByStore = '/active-employees-by-store';
+  static const String tasksByEmployee = '/tasks-by-employee';
+  static const String employeeReport = '/employee-report';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -67,6 +73,12 @@ class AppRoutes {
         return _buildRoute(const req_screen.RequestsScreen());
       case adminRequests:
         return _buildRoute(const AdminRequestsScreen());
+      case activeEmployeesByStore:
+        return _buildRoute(const ActiveEmployeesByStoreScreen());
+      case tasksByEmployee:
+        return _buildRoute(const TasksByEmployeeScreen());
+      case employeeReport:
+        return _buildRoute(const EmployeeReportScreen());
       default:
         return _buildRoute(
           Scaffold(

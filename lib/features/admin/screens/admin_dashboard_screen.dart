@@ -291,39 +291,54 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.successColor.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(Icons.person_pin_circle, color: AppTheme.successColor),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'الموظفون النشطون الآن',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.successColor,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${activeAttendance.length}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+        InkWell(
+          onTap: () {
+            Navigator.pushNamed(context, AppRoutes.activeEmployeesByStore);
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.person_pin_circle, color: AppTheme.successColor),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Text(
+                  'الموظفون النشطون الآن',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${activeAttendance.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
+              ],
             ),
-          ],
+          ),
         ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
         const SizedBox(height: 15),
         if (activeAttendance.isEmpty)
@@ -484,7 +499,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         'route': AppRoutes.tasks,
         'badge': 0,
       },
-      // NEW: Requests management card
+      {
+        'title': 'المهام حسب الموظفين',
+        'subtitle': 'عرض المهام مصنفة بحسب كل موظف',
+        'icon': Icons.assignment_ind,
+        'gradient': [Colors.teal, Colors.teal.shade300],
+        'route': AppRoutes.tasksByEmployee,
+        'badge': 0,
+      },
+      // Requests management card
       {
         'title': 'إدارة الطلبات',
         'subtitle': 'طلبات الإجازات والزمنيات',
@@ -492,6 +515,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         'gradient': [AppTheme.accentColor, AppTheme.accentColor.withOpacity(0.7)],
         'route': AppRoutes.adminRequests,
         'badge': requestProvider.pendingCount,
+      },
+      // Employee Reports card
+      {
+        'title': 'تقارير الموظفين',
+        'subtitle': 'إنشاء تقارير PDF للحضور والمهام',
+        'icon': Icons.picture_as_pdf,
+        'gradient': [Colors.deepPurple, Colors.deepPurple.shade300],
+        'route': AppRoutes.employeeReport,
+        'badge': 0,
       },
     ];
 

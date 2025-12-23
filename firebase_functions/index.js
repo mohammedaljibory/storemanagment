@@ -649,6 +649,288 @@ exports.onNotificationCreated = functions.firestore
     });
 
 // ============================================
+// SHIFT END MONITORING (Scheduled Function)
+// ============================================
+
+/**
+ * Check for employees who haven't logged out after shift end
+ * Runs every 5 minutes
+ * - At shift end: notify employee to logout
+ * - 30 min after shift end: notify admin and auto-logout
+ */
+exports.checkShiftEndAttendance = functions.pubsub
+    .schedule("every 5 minutes")
+    .timeZone("Asia/Baghdad")
+    .onRun(async (context) => {
+      console.log("Running shift end check...");
+
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+
+      // Get all active attendance (checkOut is null)
+      const activeAttendanceSnapshot = await db
+          .collection("attendance")
+          .where("checkOut", "==", null)
+          .get();
+
+      if (activeAttendanceSnapshot.empty) {
+        console.log("No active attendance records found");
+        return null;
+      }
+
+      console.log(`Found ${activeAttendanceSnapshot.size} active attendance records`);
+
+      const batch = db.batch();
+      let batchCount = 0;
+
+      for (const doc of activeAttendanceSnapshot.docs) {
+        const attendance = doc.data();
+        const attendanceId = doc.id;
+
+        // Parse expected end time (e.g., "14:00" or "01:00")
+        const expectedEndTime = attendance.expectedEndTime;
+        if (!expectedEndTime) {
+          console.log(`No expectedEndTime for attendance ${attendanceId}`);
+          continue;
+        }
+
+        const [endHour, endMinute] = expectedEndTime.split(":").map(Number);
+
+        // Get check-in time to determine if overnight shift
+        const checkIn = attendance.checkIn ? new Date(attendance.checkIn) : null;
+        if (!checkIn) continue;
+
+        // Calculate expected end DateTime
+        let expectedEndDateTime = new Date(checkIn);
+        expectedEndDateTime.setHours(endHour, endMinute, 0, 0);
+
+        // If end hour is less than check-in hour, it's overnight - add a day
+        if (endHour < checkIn.getHours() || (endHour <= 6 && checkIn.getHours() >= 12)) {
+          expectedEndDateTime.setDate(expectedEndDateTime.getDate() + 1);
+        }
+
+        // Calculate time difference in minutes
+        const minutesSinceShiftEnd = Math.floor((now - expectedEndDateTime) / (1000 * 60));
+
+        console.log(`Attendance ${attendanceId}: shiftEnd=${expectedEndTime}, minutesSince=${minutesSinceShiftEnd}, notified=${attendance.shiftEndNotified}, adminNotified=${attendance.adminNotifiedLateCheckout}`);
+
+        // Shift hasn't ended yet
+        if (minutesSinceShiftEnd < 0) {
+          continue;
+        }
+
+        // Shift ended - check if we need to notify
+        if (minutesSinceShiftEnd >= 0 && minutesSinceShiftEnd < 30 && !attendance.shiftEndNotified) {
+          // Send notification to employee to logout
+          console.log(`Notifying employee ${attendance.userId} to logout`);
+          await notifyEmployeeShiftEnded(attendance, attendanceId);
+
+          // Mark as notified
+          batch.update(doc.ref, {shiftEndNotified: true, shiftEndNotifiedAt: now.toISOString()});
+          batchCount++;
+        }
+
+        // 30+ minutes after shift end - notify admin and force logout
+        if (minutesSinceShiftEnd >= 30 && !attendance.adminNotifiedLateCheckout) {
+          console.log(`30+ min late checkout for ${attendance.userName}, notifying admin and auto-checkout`);
+
+          // Notify admin
+          await notifyAdminLateCheckout(attendance, attendanceId, minutesSinceShiftEnd);
+
+          // Force checkout
+          const checkOutTime = now.toISOString();
+          const checkInTime = new Date(attendance.checkIn);
+          const totalHours = (now - checkInTime) / (1000 * 60 * 60);
+
+          batch.update(doc.ref, {
+            checkOut: checkOutTime,
+            checkOutLocation: attendance.checkInLocation, // Use same location
+            totalHours: Math.round(totalHours * 100) / 100,
+            adminNotifiedLateCheckout: true,
+            autoCheckout: true,
+            autoCheckoutReason: "تجاوز 30 دقيقة بعد انتهاء الشفت",
+            notes: (attendance.notes || "") + " [خروج تلقائي]",
+          });
+          batchCount++;
+
+          // Notify employee about auto-checkout
+          await notifyEmployeeAutoCheckout(attendance, attendanceId);
+        }
+      }
+
+      if (batchCount > 0) {
+        await batch.commit();
+        console.log(`Updated ${batchCount} attendance records`);
+      }
+
+      return null;
+    });
+
+/**
+ * Notify employee that their shift has ended
+ */
+async function notifyEmployeeShiftEnded(attendance, attendanceId) {
+  const tokens = await getTokensForUsers([attendance.userId]);
+  if (tokens.length === 0) {
+    console.log("No tokens for employee shift end notification");
+    return;
+  }
+
+  const message = {
+    notification: {
+      title: "انتهى وقت الشفت",
+      body: `يرجى تسجيل الخروج الآن. سيتم تسجيل الخروج تلقائياً بعد 30 دقيقة`,
+    },
+    data: {
+      type: "shift_end_reminder",
+      attendanceId: attendanceId,
+      action: "checkout_reminder",
+      click_action: "FLUTTER_NOTIFICATION_CLICK",
+    },
+    android: {
+      notification: {
+        channelId: "attendance_channel",
+        priority: "high",
+        defaultSound: true,
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+          badge: 1,
+        },
+      },
+    },
+    tokens: tokens,
+  };
+
+  await sendMulticastNotification(message, "notifyEmployeeShiftEnded");
+
+  // Also create notification document for history
+  await db.collection("notifications").add({
+    title: "انتهى وقت الشفت",
+    body: "يرجى تسجيل الخروج الآن. سيتم تسجيل الخروج تلقائياً بعد 30 دقيقة",
+    type: "shift_end_reminder",
+    forEmployee: true,
+    targetUserId: attendance.userId,
+    createdAt: new Date().toISOString(),
+    read: false,
+    skipPush: true, // Already sent push above
+  });
+}
+
+/**
+ * Notify admin about late checkout
+ */
+async function notifyAdminLateCheckout(attendance, attendanceId, minutesLate) {
+  const adminTokens = await getAdminTokens();
+  if (adminTokens.length === 0) {
+    console.log("No admin tokens for late checkout notification");
+    return;
+  }
+
+  const message = {
+    notification: {
+      title: "موظف لم يسجل خروج",
+      body: `${attendance.userName} لم يسجل خروج منذ ${minutesLate} دقيقة بعد انتهاء الشفت - سيتم تسجيل الخروج تلقائياً`,
+    },
+    data: {
+      type: "late_checkout_admin",
+      attendanceId: attendanceId,
+      employeeId: attendance.userId,
+      action: "late_checkout",
+      click_action: "FLUTTER_NOTIFICATION_CLICK",
+    },
+    android: {
+      notification: {
+        channelId: "attendance_channel",
+        priority: "high",
+        defaultSound: true,
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+          badge: 1,
+        },
+      },
+    },
+    tokens: adminTokens,
+  };
+
+  await sendMulticastNotification(message, "notifyAdminLateCheckout");
+
+  // Also create notification document for history
+  await db.collection("notifications").add({
+    title: "موظف لم يسجل خروج",
+    body: `${attendance.userName} لم يسجل خروج منذ ${minutesLate} دقيقة بعد انتهاء الشفت`,
+    type: "late_checkout_admin",
+    forAdmin: true,
+    employeeId: attendance.userId,
+    employeeName: attendance.userName,
+    createdAt: new Date().toISOString(),
+    read: false,
+    skipPush: true,
+  });
+}
+
+/**
+ * Notify employee about auto-checkout
+ */
+async function notifyEmployeeAutoCheckout(attendance, attendanceId) {
+  const tokens = await getTokensForUsers([attendance.userId]);
+  if (tokens.length === 0) {
+    return;
+  }
+
+  const message = {
+    notification: {
+      title: "تسجيل خروج تلقائي",
+      body: "تم تسجيل خروجك تلقائياً بعد تجاوز 30 دقيقة من انتهاء الشفت",
+    },
+    data: {
+      type: "auto_checkout",
+      attendanceId: attendanceId,
+      action: "auto_checkout",
+      click_action: "FLUTTER_NOTIFICATION_CLICK",
+    },
+    android: {
+      notification: {
+        channelId: "attendance_channel",
+        priority: "high",
+        defaultSound: true,
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: "default",
+          badge: 1,
+        },
+      },
+    },
+    tokens: tokens,
+  };
+
+  await sendMulticastNotification(message, "notifyEmployeeAutoCheckout");
+
+  // Also create notification document
+  await db.collection("notifications").add({
+    title: "تسجيل خروج تلقائي",
+    body: "تم تسجيل خروجك تلقائياً بعد تجاوز 30 دقيقة من انتهاء الشفت",
+    type: "auto_checkout",
+    forEmployee: true,
+    targetUserId: attendance.userId,
+    createdAt: new Date().toISOString(),
+    read: false,
+    skipPush: true,
+  });
+}
+
+// ============================================
 // MANUAL NOTIFICATION FUNCTION (HTTP callable)
 // ============================================
 

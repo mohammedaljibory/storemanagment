@@ -365,6 +365,32 @@ class RequestProvider extends ChangeNotifier {
         r.type == RequestType.fullDayOff);
   }
 
+  /// Get all approved day offs for an employee in a given month
+  List<RequestModel> getApprovedDayOffsForMonth(String employeeId, int year, int month) {
+    return _requests.where((r) =>
+        r.employeeId == employeeId &&
+        r.status == RequestStatus.approved &&
+        r.targetDate.year == year &&
+        r.targetDate.month == month &&
+        r.type == RequestType.fullDayOff).toList();
+  }
+
+  /// Get all approved requests (day offs and time offs) for an employee in a given month
+  List<RequestModel> getApprovedRequestsForMonth(String employeeId, int year, int month) {
+    return _requests.where((r) =>
+        r.employeeId == employeeId &&
+        r.status == RequestStatus.approved &&
+        r.targetDate.year == year &&
+        r.targetDate.month == month).toList();
+  }
+
+  /// Get approved day off dates as a Set for quick lookup
+  Set<DateTime> getApprovedDayOffDates(String employeeId, int year, int month) {
+    return getApprovedDayOffsForMonth(employeeId, year, month)
+        .map((r) => DateTime(r.targetDate.year, r.targetDate.month, r.targetDate.day))
+        .toSet();
+  }
+
   /// Check if employee has approved time-off for a specific time
   RequestModel? getApprovedTimeOff(String employeeId, DateTime dateTime) {
     try {

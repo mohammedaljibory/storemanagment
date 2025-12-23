@@ -3,9 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/attendance_provider.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/request_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/models/attendance_model.dart';
+import '../../../core/models/request_model.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({Key? key}) : super(key: key);
@@ -110,10 +112,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
               const SizedBox(height: 20),
 
               // Stats Cards
-              Consumer<AttendanceProvider>(
-                builder: (context, provider, _) {
-                  final stats = provider.getMonthlyStats(_selectedYear, _selectedMonth);
-                  
+              Consumer2<AttendanceProvider, RequestProvider>(
+                builder: (context, attendanceProvider, requestProvider, _) {
+                  final stats = attendanceProvider.getMonthlyStats(_selectedYear, _selectedMonth);
+                  final authProvider = context.read<AuthProvider>();
+                  final userId = authProvider.user?.id ?? '';
+                  final dayOffs = requestProvider.getApprovedDayOffsForMonth(userId, _selectedYear, _selectedMonth);
+
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Row(
@@ -131,10 +136,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                         Expanded(
                           child: _buildStatCard(
                             context,
-                            'التأخير',
-                            '${stats['lateDays']}',
-                            Icons.schedule,
-                            AppTheme.warningColor,
+                            'الإجازات',
+                            '${dayOffs.length}',
+                            Icons.event_busy,
+                            AppTheme.accentColor,
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -234,15 +239,28 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
   }
 
   Widget _buildHistoryTab() {
-    return Consumer<AttendanceProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading) {
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id ?? '';
+
+    return Consumer2<AttendanceProvider, RequestProvider>(
+      builder: (context, attendanceProvider, requestProvider, _) {
+        if (attendanceProvider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final monthAttendance = provider.getAttendanceForMonth(_selectedYear, _selectedMonth);
+        final monthAttendance = attendanceProvider.getAttendanceForMonth(_selectedYear, _selectedMonth);
+        final dayOffs = requestProvider.getApprovedDayOffsForMonth(userId, _selectedYear, _selectedMonth);
 
-        if (monthAttendance.isEmpty) {
+        // Combine attendance and day offs into a list of records sorted by date
+        final List<dynamic> combinedRecords = [
+          ...monthAttendance.map((a) => {'type': 'attendance', 'data': a, 'date': a.checkIn}),
+          ...dayOffs.map((d) => {'type': 'dayOff', 'data': d, 'date': d.targetDate}),
+        ];
+
+        // Sort by date descending
+        combinedRecords.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+
+        if (combinedRecords.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -266,13 +284,86 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
 
         return ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: monthAttendance.length,
+          itemCount: combinedRecords.length,
           itemBuilder: (context, index) {
-            return _buildAttendanceCard(monthAttendance[index], index);
+            final record = combinedRecords[index];
+            if (record['type'] == 'dayOff') {
+              return _buildDayOffCard(record['data'] as RequestModel, index);
+            }
+            return _buildAttendanceCard(record['data'] as AttendanceModel, index);
           },
         );
       },
     );
+  }
+
+  Widget _buildDayOffCard(RequestModel dayOff, int index) {
+    return GlassContainer(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.accentColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.event_busy,
+              color: AppTheme.accentColor,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _formatDate(dayOff.targetDate),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'إجازة معتمدة',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.accentColor,
+                      ),
+                ),
+                if (dayOff.reason.isNotEmpty)
+                  Text(
+                    dayOff.reason,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.accentColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              'إجازة',
+              style: TextStyle(
+                color: AppTheme.accentColor,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ).animate()
+        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
+        .slideX(begin: 0.2, end: 0);
   }
 
   Widget _buildAttendanceCard(AttendanceModel attendance, int index) {
@@ -495,9 +586,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
   }
 
   Widget _buildStatsTab() {
-    return Consumer<AttendanceProvider>(
-      builder: (context, provider, _) {
-        final stats = provider.getMonthlyStats(_selectedYear, _selectedMonth);
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.user?.id ?? '';
+
+    return Consumer2<AttendanceProvider, RequestProvider>(
+      builder: (context, attendanceProvider, requestProvider, _) {
+        final stats = attendanceProvider.getMonthlyStats(_selectedYear, _selectedMonth);
+        final dayOffs = requestProvider.getApprovedDayOffsForMonth(userId, _selectedYear, _selectedMonth);
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
         return SingleChildScrollView(
@@ -519,6 +614,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     _buildStatRow('إجمالي أيام العمل', '${stats['totalDays']} يوم', AppTheme.primaryColor),
                     const Divider(height: 20),
                     _buildStatRow('الأيام المنتظمة', '${stats['onTimeDays']} يوم', AppTheme.successColor),
+                    const Divider(height: 20),
+                    _buildStatRow('أيام الإجازات المعتمدة', '${dayOffs.length} يوم', AppTheme.accentColor),
                     const Divider(height: 20),
                     _buildStatRow('أيام التأخير', '${stats['lateDays']} يوم', AppTheme.warningColor),
                     const Divider(height: 20),
