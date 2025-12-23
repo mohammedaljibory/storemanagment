@@ -489,6 +489,10 @@ async function sendMulticastNotification(message, functionName) {
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
           const errorCode = resp.error?.code;
+          const errorMessage = resp.error?.message;
+          // Log the actual error for debugging
+          console.error(`Token ${idx} failed: ${errorCode} - ${errorMessage}`);
+
           // Remove invalid or unregistered tokens
           if (
             errorCode === "messaging/invalid-registration-token" ||
