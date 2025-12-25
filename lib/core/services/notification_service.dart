@@ -259,7 +259,7 @@ class NotificationService {
     );
   }
 
-  /// Schedule multiple reminders (15 min, 5 min, at end time)
+  /// Schedule multiple reminders (15 min, 10 min, 5 min, at end time)
   static Future<void> scheduleSignOutReminders({
     required DateTime shiftEndTime,
     required String employeeName,
@@ -281,6 +281,18 @@ class NotificationService {
       );
     }
 
+    // 10 minutes before (important reminder)
+    final reminder10 = shiftEndTime.subtract(const Duration(minutes: 10));
+    if (reminder10.isAfter(now)) {
+      await scheduleNotification(
+        id: 1004,
+        title: '⚠️ تنبيه: 10 دقائق على نهاية الشفت',
+        body: 'يجب تسجيل الخروج في نهاية الشفت!\nسيتم تسجيل خروجك تلقائياً بعد 30 دقيقة من انتهاء الشفت',
+        scheduledTime: reminder10,
+        useAlarmSound: true,
+      );
+    }
+
     // 5 minutes before
     final reminder5 = shiftEndTime.subtract(const Duration(minutes: 5));
     if (reminder5.isAfter(now)) {
@@ -298,7 +310,7 @@ class NotificationService {
       await scheduleNotification(
         id: 1003,
         title: '🚨 انتهى وقت الشفت!',
-        body: 'يرجى تسجيل الخروج الآن',
+        body: 'يرجى تسجيل الخروج الآن\nسيتم تسجيل خروجك تلقائياً بعد 30 دقيقة',
         scheduledTime: shiftEndTime,
         useAlarmSound: true,
       );
@@ -307,9 +319,10 @@ class NotificationService {
 
   /// Cancel sign-out reminder notifications
   static Future<void> cancelSignOutReminders() async {
-    await _notifications.cancel(1001);
-    await _notifications.cancel(1002);
-    await _notifications.cancel(1003);
+    await _notifications.cancel(1001); // 15 min
+    await _notifications.cancel(1002); // 5 min
+    await _notifications.cancel(1003); // at end
+    await _notifications.cancel(1004); // 10 min
   }
 
   /// Cancel all scheduled notifications
