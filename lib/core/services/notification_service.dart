@@ -107,6 +107,29 @@ class NotificationService {
           importance: Importance.high,
         ),
       );
+
+      // Location monitoring channel (low priority - ongoing status)
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'location_monitoring',
+          'Location Monitoring',
+          description: 'Shows when location tracking is active',
+          importance: Importance.low,
+        ),
+      );
+
+      // Location alert channel (high priority - when employee leaves area)
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'location_alert',
+          'Location Alerts',
+          description: 'Alerts when employee leaves work area',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+          enableLights: true,
+        ),
+      );
     }
   }
 
