@@ -15,6 +15,7 @@ import '../../tasks/screens/tasks_screen.dart';
 import '../../attendance/screens/attendance_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../requests/screens/requests_screen.dart';
+import '../../attendance/widgets/break_button_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -322,6 +323,16 @@ class _DashboardTabState extends State<DashboardTab> {
                 _buildTodayStatus(context, attendanceProvider, isDarkMode)
                     .animate()
                     .fadeIn(delay: 300.ms, duration: 600.ms),
+                const SizedBox(height: 15),
+
+                // Break Button - shows during active attendance
+                if (user != null)
+                  BreakButtonWidget(
+                    attendance: attendanceProvider.currentSession!,
+                    userId: user.id,
+                    userName: user.name,
+                  ).animate()
+                      .fadeIn(delay: 350.ms, duration: 600.ms),
                 const SizedBox(height: 25),
               ],
               
