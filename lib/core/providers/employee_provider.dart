@@ -416,9 +416,78 @@ class EmployeeProvider extends ChangeNotifier {
     }
   }
 
-  /// Delete employee
+  /// Delete employee (soft delete - just deactivates)
   Future<bool> deleteEmployee(String employeeId) async {
     return deactivateEmployee(employeeId);
+  }
+
+  /// Permanently delete employee and all related data
+  /// WARNING: This is irreversible!
+  Future<bool> permanentlyDeleteEmployee(String employeeId) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final batch = _firestore.batch();
+
+      // 1. Delete user document
+      final userRef = _firestore.collection('users').doc(employeeId);
+      batch.delete(userRef);
+
+      // 2. Delete all attendance records
+      final attendanceSnapshot = await _firestore
+          .collection('attendance')
+          .where('userId', isEqualTo: employeeId)
+          .get();
+      for (final doc in attendanceSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // 3. Delete all tasks assigned to this employee
+      final tasksSnapshot = await _firestore
+          .collection('tasks')
+          .where('assignedTo', isEqualTo: employeeId)
+          .get();
+      for (final doc in tasksSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // 4. Delete all requests from this employee
+      final requestsSnapshot = await _firestore
+          .collection('requests')
+          .where('employeeId', isEqualTo: employeeId)
+          .get();
+      for (final doc in requestsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // 5. Delete all notifications for this employee
+      final notificationsSnapshot = await _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: employeeId)
+          .get();
+      for (final doc in notificationsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // Commit all deletions
+      await batch.commit();
+
+      // Remove from local list
+      _employees.removeWhere((e) => e.id == employeeId);
+
+      _isLoading = false;
+      notifyListeners();
+
+      print('Permanently deleted employee: $employeeId');
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'فشل في حذف الموظف نهائياً: $e';
+      notifyListeners();
+      print('Error permanently deleting employee: $e');
+      return false;
+    }
   }
 
   /// Get employee by ID

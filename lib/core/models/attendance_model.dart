@@ -46,7 +46,14 @@ class AttendanceModel {
   final bool isEarlyLeave;
   final int earlyLeaveMinutes;
   final String? notes;
-  final int penaltyMinutes;  // NEW: Penalty for being late beyond tolerance
+  final int penaltyMinutes;
+
+  // Break fields
+  final DateTime? breakStartTime;
+  final DateTime? breakEndTime;
+  final bool isOnBreak;
+  final int totalBreakMinutes;
+  final int breakOvertimeMinutes; // Minutes exceeded break limit
 
   AttendanceModel({
     required this.id,
@@ -69,6 +76,11 @@ class AttendanceModel {
     this.earlyLeaveMinutes = 0,
     this.notes,
     this.penaltyMinutes = 0,
+    this.breakStartTime,
+    this.breakEndTime,
+    this.isOnBreak = false,
+    this.totalBreakMinutes = 0,
+    this.breakOvertimeMinutes = 0,
   });
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
@@ -101,6 +113,15 @@ class AttendanceModel {
       earlyLeaveMinutes: json['earlyLeaveMinutes'] as int? ?? 0,
       notes: json['notes'] as String?,
       penaltyMinutes: json['penaltyMinutes'] as int? ?? 0,
+      breakStartTime: json['breakStartTime'] != null
+          ? DateTime.parse(json['breakStartTime'] as String)
+          : null,
+      breakEndTime: json['breakEndTime'] != null
+          ? DateTime.parse(json['breakEndTime'] as String)
+          : null,
+      isOnBreak: json['isOnBreak'] as bool? ?? false,
+      totalBreakMinutes: json['totalBreakMinutes'] as int? ?? 0,
+      breakOvertimeMinutes: json['breakOvertimeMinutes'] as int? ?? 0,
     );
   }
 
@@ -126,6 +147,11 @@ class AttendanceModel {
       'earlyLeaveMinutes': earlyLeaveMinutes,
       'notes': notes,
       'penaltyMinutes': penaltyMinutes,
+      'breakStartTime': breakStartTime?.toIso8601String(),
+      'breakEndTime': breakEndTime?.toIso8601String(),
+      'isOnBreak': isOnBreak,
+      'totalBreakMinutes': totalBreakMinutes,
+      'breakOvertimeMinutes': breakOvertimeMinutes,
     };
   }
 
@@ -150,6 +176,11 @@ class AttendanceModel {
     int? earlyLeaveMinutes,
     String? notes,
     int? penaltyMinutes,
+    DateTime? breakStartTime,
+    DateTime? breakEndTime,
+    bool? isOnBreak,
+    int? totalBreakMinutes,
+    int? breakOvertimeMinutes,
   }) {
     return AttendanceModel(
       id: id ?? this.id,
@@ -172,6 +203,11 @@ class AttendanceModel {
       earlyLeaveMinutes: earlyLeaveMinutes ?? this.earlyLeaveMinutes,
       notes: notes ?? this.notes,
       penaltyMinutes: penaltyMinutes ?? this.penaltyMinutes,
+      breakStartTime: breakStartTime ?? this.breakStartTime,
+      breakEndTime: breakEndTime ?? this.breakEndTime,
+      isOnBreak: isOnBreak ?? this.isOnBreak,
+      totalBreakMinutes: totalBreakMinutes ?? this.totalBreakMinutes,
+      breakOvertimeMinutes: breakOvertimeMinutes ?? this.breakOvertimeMinutes,
     );
   }
 

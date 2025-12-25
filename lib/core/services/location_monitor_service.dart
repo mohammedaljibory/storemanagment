@@ -30,6 +30,9 @@ class LocationMonitorService {
   // Foreground notification ID for Android
   static const int _foregroundNotificationId = 8888;
 
+  // Break pause state
+  static bool _isPausedForBreak = false;
+
   /// Start monitoring employee location using position stream
   static Future<void> startMonitoring({
     required String userId,
@@ -95,9 +98,31 @@ class LocationMonitorService {
     print('📍 Stopped location monitoring');
   }
 
+  /// Pause monitoring during break (no 400m alerts)
+  static void pauseForBreak() {
+    _isPausedForBreak = true;
+    print('📍 Location monitoring paused for break');
+  }
+
+  /// Resume monitoring after break
+  static void resumeFromBreak() {
+    _isPausedForBreak = false;
+    _alertSent = false; // Reset alert state
+    print('📍 Location monitoring resumed after break');
+  }
+
+  /// Check if paused for break
+  static bool get isPausedForBreak => _isPausedForBreak;
+
   /// Handle position updates from stream
   static void _onPositionUpdate(Position position) {
     if (!_isMonitoring || _currentStore == null) return;
+
+    // Skip location alerts during break
+    if (_isPausedForBreak) {
+      print('📍 On break - skipping location check');
+      return;
+    }
 
     final distance = _currentStore!.getDistanceFrom(
       position.latitude,

@@ -615,6 +615,8 @@ exports.onNotificationCreated = functions.firestore
         channelId = "request_channel";
       } else if (type.includes("task")) {
         channelId = "task_channel";
+      } else if (type === "break_overtime") {
+        channelId = "break_channel";
       }
 
       const message = {

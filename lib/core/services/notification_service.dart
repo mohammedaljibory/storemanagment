@@ -130,6 +130,18 @@ class NotificationService {
           enableLights: true,
         ),
       );
+
+      // Break channel (for break reminders and alerts)
+      await androidPlugin.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'break_channel',
+          'Break Notifications',
+          description: 'Break time reminders and alerts',
+          importance: Importance.high,
+          playSound: true,
+          enableVibration: true,
+        ),
+      );
     }
   }
 

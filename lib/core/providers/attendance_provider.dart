@@ -345,7 +345,18 @@ class AttendanceProvider extends ChangeNotifier {
       // 5. Calculate expected end time (handles overnight shifts)
       final expectedEndTime = shift.endDateTimeFromCheckIn(now);
 
-      // 6. Create attendance record
+      // 6. Calculate penalty minutes (late minutes beyond tolerance = penalty)
+      final int lateMinutes = checkInResult['lateMinutes'] ?? 0;
+      final bool isLate = checkInResult['isLate'] ?? false;
+      int penaltyMinutes = 0;
+
+      if (isLate && lateMinutes > 0) {
+        // Penalty = late minutes (already beyond tolerance since isLate is true)
+        // The tolerance is already factored in by shift.canCheckIn()
+        penaltyMinutes = lateMinutes;
+      }
+
+      // 7. Create attendance record
       final attendance = AttendanceModel(
         id: '',
         userId: userId,
@@ -362,8 +373,9 @@ class AttendanceProvider extends ChangeNotifier {
           longitude: position.longitude,
           address: store.name,
         ),
-        isLate: checkInResult['isLate'] ?? false,
-        lateMinutes: checkInResult['lateMinutes'] ?? 0,
+        isLate: isLate,
+        lateMinutes: lateMinutes,
+        penaltyMinutes: penaltyMinutes,
       );
 
       // 7. Check connectivity and save
@@ -481,7 +493,14 @@ class AttendanceProvider extends ChangeNotifier {
 
       // Calculate total hours (handles overnight correctly)
       final checkInTime = currentAttendance.checkIn;
-      final totalHours = now.difference(checkInTime).inMinutes / 60.0;
+      double totalHours = now.difference(checkInTime).inMinutes / 60.0;
+
+      // Subtract break time from total hours
+      final breakMinutes = currentAttendance.totalBreakMinutes;
+      if (breakMinutes > 0) {
+        totalHours -= (breakMinutes / 60.0);
+        if (totalHours < 0) totalHours = 0;
+      }
 
       // Calculate early leave based on expected end time (handles overnight)
       bool isEarlyLeave = false;
