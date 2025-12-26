@@ -7,6 +7,7 @@ import '../../../core/providers/attendance_provider.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/store_provider.dart';
 import '../../../core/providers/shift_provider.dart';
+import '../../../core/models/store_model.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/routes/app_routes.dart' show AppRoutes;
 import '../../../core/theme/app_theme.dart';
@@ -542,8 +543,17 @@ class _DashboardTabState extends State<DashboardTab> {
               if (user == null) return;
 
               if (isCheckedIn) {
-                // Check Out
-                final success = await attendanceProvider.checkOut();
+                // Check Out - validate location at store
+                final currentSession = attendanceProvider.currentSession;
+                StoreModel? checkoutStore;
+                if (currentSession != null) {
+                  checkoutStore = storeProvider.getStoreById(currentSession.storeId);
+                  if (checkoutStore == null) {
+                    checkoutStore = await storeProvider.fetchStoreById(currentSession.storeId);
+                  }
+                }
+
+                final success = await attendanceProvider.checkOut(store: checkoutStore);
                 if (!success && context.mounted) {
                   _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
                 } else if (success && context.mounted) {

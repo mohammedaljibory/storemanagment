@@ -10,6 +10,7 @@ import '../models/shift_model.dart';
 import '../models/user_model.dart';
 import '../services/notification_service.dart';
 import '../services/location_monitor_service.dart';
+import '../services/break_service.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -195,7 +196,6 @@ class AttendanceProvider extends ChangeNotifier {
       _isLoading = false;
       _errorMessage = 'فشل في جلب سجل الحضور: $e';
       notifyListeners();
-      print('Error fetching attendance: $e');
     }
   }
 
@@ -283,7 +283,7 @@ class AttendanceProvider extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      print('Error checking today attendance: $e');
+      // Silent fail for checking today's attendance
     }
   }
 
@@ -456,7 +456,6 @@ class AttendanceProvider extends ChangeNotifier {
       _isLoading = false;
       _errorMessage = 'حدث خطأ أثناء تسجيل الدخول: $e';
       notifyListeners();
-      print('Check in error: $e');
       return false;
     }
   }
@@ -464,7 +463,8 @@ class AttendanceProvider extends ChangeNotifier {
   // ============ CHECK OUT ============
 
   /// Check out - handles overnight shifts correctly
-  Future<bool> checkOut({ShiftModel? shift}) async {
+  /// Validates that employee is within store radius before checkout
+  Future<bool> checkOut({ShiftModel? shift, StoreModel? store}) async {
     try {
       if (_todayAttendance == null && _currentSession == null) {
         _errorMessage = 'لم تقم بتسجيل الدخول اليوم';
@@ -489,6 +489,25 @@ class AttendanceProvider extends ChangeNotifier {
         _errorMessage = 'فشل في الحصول على الموقع: $e';
         notifyListeners();
         return false;
+      }
+
+      // Validate checkout location against store radius
+      if (store != null) {
+        final distance = store.getDistanceFrom(position.latitude, position.longitude);
+        if (!store.isWithinRadius(position.latitude, position.longitude)) {
+          _isLoading = false;
+          _errorMessage = 'يجب أن تكون داخل نطاق المتجر لتسجيل الخروج\n'
+              'النطاق المسموح: ${store.allowedRadius.toStringAsFixed(0)} متر\n'
+              'المسافة الحالية: ${distance.toStringAsFixed(0)} متر';
+          notifyListeners();
+          return false;
+        }
+      }
+
+      // Auto-end break if employee is on break
+      final breakService = BreakService();
+      if (breakService.isOnBreak) {
+        await breakService.endBreak();
       }
 
       // Calculate total hours (handles overnight correctly)
@@ -530,7 +549,7 @@ class AttendanceProvider extends ChangeNotifier {
           earlyLeaveMinutes = expectedEnd.difference(now).inMinutes;
         }
       } catch (e) {
-        print('Error parsing end time: $e');
+        // End time parsing error - continue with checkout
       }
 
       // Prepare update data
@@ -616,7 +635,6 @@ class AttendanceProvider extends ChangeNotifier {
       _isLoading = false;
       _errorMessage = 'حدث خطأ أثناء تسجيل الخروج: $e';
       notifyListeners();
-      print('Check out error: $e');
       return false;
     }
   }
@@ -698,51 +716,37 @@ class AttendanceProvider extends ChangeNotifier {
   int get activeEmployeesCount => _activeAttendance.length;
 
   /// Fetch all employees who are currently checked in (for admin dashboard)
+  /// Uses efficient query with checkOut filter
   Future<void> fetchActiveAttendance() async {
     try {
-      print('🔍 Fetching active attendance...');
+      final now = DateTime.now();
+      final twoDaysAgo = now.subtract(const Duration(days: 2));
 
-      // Fetch ALL attendance records (no date filter since checkIn might be string)
+      // Efficient query: only fetch records without checkout from last 2 days
       final snapshot = await _firestore
           .collection('attendance')
+          .where('checkOut', isNull: true)
+          .where('checkIn', isGreaterThan: twoDaysAgo.toIso8601String())
           .get();
-
-      print('📊 Found ${snapshot.docs.length} total attendance records');
-
-      final now = DateTime.now();
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
       final allRecords = <AttendanceModel>[];
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
         data['id'] = doc.id;
-
-        // Debug raw values
-        print('   Record: ${data['userName']} - checkOut: ${data['checkOut']} (${data['checkOut'].runtimeType})');
-
         _convertTimestamps(data);
 
         try {
           final attendance = AttendanceModel.fromJson(data);
-
-          // Filter by date in code (handles both string and Timestamp checkIn)
-          if (attendance.checkIn.isAfter(sevenDaysAgo)) {
-            allRecords.add(attendance);
-          }
+          allRecords.add(attendance);
         } catch (e) {
-          print('   ⚠️ Error parsing record: $e');
+          // Skip invalid records
         }
       }
 
-      print('📊 Records in last 7 days: ${allRecords.length}');
-
-      // Filter only those with no checkout
-      final activeRecords = allRecords.where((a) => a.checkOut == null).toList();
-
       // Remove duplicates - keep only most recent check-in per employee
       final Map<String, AttendanceModel> uniqueByUser = {};
-      for (var record in activeRecords) {
+      for (var record in allRecords) {
         if (!uniqueByUser.containsKey(record.userId) ||
             record.checkIn.isAfter(uniqueByUser[record.userId]!.checkIn)) {
           uniqueByUser[record.userId] = record;
@@ -750,28 +754,24 @@ class AttendanceProvider extends ChangeNotifier {
       }
       _activeAttendance = uniqueByUser.values.toList();
 
-      print('✅ Active employees (unique): ${_activeAttendance.length}');
-      for (var a in _activeAttendance) {
-        print('   - ${a.userName} at ${a.storeName}');
-      }
-
       notifyListeners();
     } catch (e) {
-      print('❌ Error fetching active attendance: $e');
+      // Silent fail
     }
   }
 
   /// Stream of active attendance (real-time)
+  /// Uses efficient query with checkOut filter
   Stream<List<AttendanceModel>> activeAttendanceStream() {
-    print('🔄 Creating active attendance stream...');
+    final now = DateTime.now();
+    final twoDaysAgo = now.subtract(const Duration(days: 2));
 
     return _firestore
         .collection('attendance')
+        .where('checkOut', isNull: true)
+        .where('checkIn', isGreaterThan: twoDaysAgo.toIso8601String())
         .snapshots()
         .map((snapshot) {
-          final now = DateTime.now();
-          final sevenDaysAgo = now.subtract(const Duration(days: 7));
-
           final allRecords = <AttendanceModel>[];
 
           for (var doc in snapshot.docs) {
@@ -781,20 +781,15 @@ class AttendanceProvider extends ChangeNotifier {
 
             try {
               final attendance = AttendanceModel.fromJson(data);
-              if (attendance.checkIn.isAfter(sevenDaysAgo)) {
-                allRecords.add(attendance);
-              }
+              allRecords.add(attendance);
             } catch (e) {
               // Skip invalid records
             }
           }
 
-          // Filter only those with no checkout
-          final activeRecords = allRecords.where((a) => a.checkOut == null).toList();
-
           // Remove duplicates - keep only most recent check-in per employee
           final Map<String, AttendanceModel> uniqueByUser = {};
-          for (var record in activeRecords) {
+          for (var record in allRecords) {
             if (!uniqueByUser.containsKey(record.userId) ||
                 record.checkIn.isAfter(uniqueByUser[record.userId]!.checkIn)) {
               uniqueByUser[record.userId] = record;
@@ -805,7 +800,6 @@ class AttendanceProvider extends ChangeNotifier {
           // Also update the local list for fallback
           _activeAttendance = active;
 
-          print('🔄 Stream update: ${active.length} active employees');
           return active;
         });
   }

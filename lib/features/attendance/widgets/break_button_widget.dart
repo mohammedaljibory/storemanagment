@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/break_service.dart';
 import '../../../core/models/attendance_model.dart';
 
-/// Break button widget with countdown timer
-/// Shows during active attendance - allows 1 hour break
-class BreakButtonWidget extends StatelessWidget {
+/// Break button widget with admin approval flow
+/// Shows during active attendance - requires admin approval for break
+class BreakButtonWidget extends StatefulWidget {
   final AttendanceModel attendance;
   final String userId;
   final String userName;
@@ -18,35 +18,68 @@ class BreakButtonWidget extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: BreakService(),
-      child: Consumer<BreakService>(
-        builder: (context, breakService, _) {
-          if (breakService.isOnBreak) {
-            return _buildOnBreakCard(context, breakService);
-          } else {
-            return _buildStartBreakButton(context, breakService);
-          }
-        },
-      ),
-    );
+  State<BreakButtonWidget> createState() => _BreakButtonWidgetState();
+}
+
+class _BreakButtonWidgetState extends State<BreakButtonWidget> {
+  final BreakService _breakService = BreakService();
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Check break status on init (handles app restart)
+    _breakService.checkBreakStatus(widget.attendance.id, widget.userId);
+    _breakService.addListener(_onBreakStateChanged);
   }
 
-  Widget _buildStartBreakButton(BuildContext context, BreakService breakService) {
-    // Check if already took break today
-    if (attendance.breakEndTime != null) {
+  @override
+  void dispose() {
+    _breakService.removeListener(_onBreakStateChanged);
+    super.dispose();
+  }
+
+  void _onBreakStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Check if break was already taken today (from attendance record)
+    if (widget.attendance.breakEndTime != null) {
       return _buildBreakCompletedCard(context);
     }
 
+    // Listen to break service state
+    if (_breakService.isOnBreak) {
+      return _buildOnBreakCard(context);
+    }
+
+    if (_breakService.hasPendingRequest) {
+      return _buildPendingRequestCard(context);
+    }
+
+    return _buildRequestBreakButton(context);
+  }
+
+  Widget _buildRequestBreakButton(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ElevatedButton.icon(
-        onPressed: () => _showStartBreakDialog(context, breakService),
-        icon: const Icon(Icons.coffee, size: 24),
-        label: const Text(
-          'بدء الاستراحة',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        onPressed: _isLoading ? null : () => _showRequestBreakDialog(context),
+        icon: _isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.coffee, size: 24),
+        label: Text(
+          _isLoading ? 'جاري الإرسال...' : 'طلب استراحة',
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.orange.shade600,
@@ -61,8 +94,87 @@ class BreakButtonWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildOnBreakCard(BuildContext context, BreakService breakService) {
-    final isOvertime = breakService.isOvertime;
+  Widget _buildPendingRequestCard(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.shade300, width: 2),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'بانتظار موافقة المدير',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'تم إرسال طلب الاستراحة\nسيتم إعلامك عند الموافقة',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.blue.shade700,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Cancel button
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _cancelBreakRequest,
+            icon: const Icon(Icons.close, size: 18),
+            label: const Text('إلغاء الطلب'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+            ),
+          ),
+          // Listen for approval in real-time
+          if (_breakService.pendingRequestId != null)
+            StreamBuilder<DocumentSnapshot>(
+              stream: _breakService.breakRequestStream(_breakService.pendingRequestId!),
+              builder: (context, snapshot) {
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  final data = snapshot.data!.data() as Map<String, dynamic>;
+                  final status = data['status'] as String?;
+
+                  if (status == 'approved') {
+                    // Auto-start break when approved
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _startApprovedBreak();
+                    });
+                  } else if (status == 'rejected') {
+                    // Show rejection and reset
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _handleRejection(data['rejectionReason'] ?? 'لم يتم تحديد السبب');
+                    });
+                  }
+                }
+                return const SizedBox.shrink();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOnBreakCard(BuildContext context) {
+    final isOvertime = _breakService.isOvertime;
     final backgroundColor = isOvertime ? Colors.red.shade100 : Colors.orange.shade100;
     final borderColor = isOvertime ? Colors.red : Colors.orange;
 
@@ -130,8 +242,8 @@ class BreakButtonWidget extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   isOvertime
-                      ? '${breakService.overtimeMinutes} دقيقة'
-                      : breakService.remainingTimeText,
+                      ? '${_breakService.overtimeMinutes} دقيقة'
+                      : _breakService.remainingTimeText,
                   style: TextStyle(
                     fontSize: 48,
                     fontWeight: FontWeight.bold,
@@ -142,7 +254,7 @@ class BreakButtonWidget extends StatelessWidget {
                 if (!isOvertime) ...[
                   const SizedBox(height: 4),
                   Text(
-                    'مضى: ${breakService.elapsedTimeText}',
+                    'مضى: ${_breakService.elapsedTimeText}',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey.shade600,
@@ -158,8 +270,17 @@ class BreakButtonWidget extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => _endBreak(context, breakService),
-              icon: const Icon(Icons.work),
+              onPressed: _isLoading ? null : _endBreak,
+              icon: _isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.work),
               label: const Text(
                 'إنهاء الاستراحة والعودة للعمل',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -192,8 +313,8 @@ class BreakButtonWidget extends StatelessWidget {
   }
 
   Widget _buildBreakCompletedCard(BuildContext context) {
-    final breakDuration = attendance.totalBreakMinutes;
-    final overtime = attendance.breakOvertimeMinutes;
+    final breakDuration = widget.attendance.totalBreakMinutes;
+    final overtime = widget.attendance.breakOvertimeMinutes;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -233,7 +354,7 @@ class BreakButtonWidget extends StatelessWidget {
     );
   }
 
-  void _showStartBreakDialog(BuildContext context, BreakService breakService) {
+  void _showRequestBreakDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -241,15 +362,19 @@ class BreakButtonWidget extends StatelessWidget {
           children: [
             Icon(Icons.coffee, color: Colors.orange),
             SizedBox(width: 8),
-            Text('بدء الاستراحة'),
+            Text('طلب استراحة'),
           ],
         ),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('هل تريد بدء الاستراحة؟'),
+            Text('هل تريد إرسال طلب استراحة؟'),
             SizedBox(height: 12),
+            Text(
+              '• سيتم إرسال الطلب للمدير للموافقة',
+              style: TextStyle(fontSize: 14),
+            ),
             Text(
               '• مدة الاستراحة: 60 دقيقة',
               style: TextStyle(fontSize: 14),
@@ -276,38 +401,44 @@ class BreakButtonWidget extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _startBreak(context, breakService);
+              _requestBreak();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
             ),
-            child: const Text('بدء الاستراحة'),
+            child: const Text('إرسال الطلب'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _startBreak(BuildContext context, BreakService breakService) async {
-    final success = await breakService.startBreak(
-      attendanceId: attendance.id,
-      userId: userId,
-      userName: userName,
+  Future<void> _requestBreak() async {
+    setState(() => _isLoading = true);
+
+    final success = await _breakService.requestBreak(
+      attendanceId: widget.attendance.id,
+      userId: widget.userId,
+      userName: widget.userName,
+      storeId: widget.attendance.storeId,
+      storeName: widget.attendance.storeName,
     );
 
-    if (context.mounted) {
+    setState(() => _isLoading = false);
+
+    if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('بدأت الاستراحة - لديك 60 دقيقة'),
-            backgroundColor: Colors.orange,
+            content: Text('تم إرسال طلب الاستراحة - بانتظار موافقة المدير'),
+            backgroundColor: Colors.blue,
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('فشل في بدء الاستراحة'),
+            content: Text('فشل في إرسال طلب الاستراحة'),
             backgroundColor: Colors.red,
           ),
         );
@@ -315,18 +446,64 @@ class BreakButtonWidget extends StatelessWidget {
     }
   }
 
-  Future<void> _endBreak(BuildContext context, BreakService breakService) async {
-    final success = await breakService.endBreak();
+  Future<void> _cancelBreakRequest() async {
+    setState(() => _isLoading = true);
+    await _breakService.cancelBreakRequest();
+    setState(() => _isLoading = false);
 
-    if (context.mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم إنهاء الاستراحة - عودة للعمل'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إلغاء طلب الاستراحة'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+    }
+  }
+
+  Future<void> _startApprovedBreak() async {
+    await _breakService.startApprovedBreak(
+      attendanceId: widget.attendance.id,
+      userId: widget.userId,
+      userName: widget.userName,
+    );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تمت الموافقة! بدأت الاستراحة'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
+  void _handleRejection(String reason) {
+    _breakService.reset();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم رفض طلب الاستراحة: $reason'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
+  Future<void> _endBreak() async {
+    setState(() => _isLoading = true);
+    final success = await _breakService.endBreak();
+    setState(() => _isLoading = false);
+
+    if (mounted && success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم إنهاء الاستراحة - عودة للعمل'),
+          backgroundColor: Colors.green,
+        ),
+      );
     }
   }
 }
