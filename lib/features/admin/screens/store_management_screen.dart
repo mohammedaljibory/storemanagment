@@ -247,8 +247,13 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
                 _buildInfoChip(Icons.phone, store.phone!, AppTheme.secondaryColor),
               _buildInfoChip(
                 Icons.my_location,
-                'نطاق ${store.allowedRadius.toInt()} متر',
+                'حضور: ${store.allowedRadius.toInt()}م',
                 AppTheme.successColor,
+              ),
+              _buildInfoChip(
+                Icons.radar,
+                'مراقبة: ${store.monitoringRadius.toInt()}م',
+                Colors.orange,
               ),
               _buildInfoChip(
                 Icons.gps_fixed,
@@ -297,7 +302,10 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
     final radiusController = TextEditingController(
       text: store?.allowedRadius.toString() ?? '100',
     );
-    
+    final monitoringRadiusController = TextEditingController(
+      text: store?.monitoringRadius.toString() ?? '400',
+    );
+
     double? selectedLat = store?.latitude;
     double? selectedLng = store?.longitude;
 
@@ -350,9 +358,19 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
                     controller: radiusController,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      labelText: 'نطاق الحضور (متر)',
+                      labelText: 'نطاق الحضور والانصراف (متر)',
                       prefixIcon: Icon(Icons.my_location),
-                      helperText: 'المسافة المسموحة لتسجيل الحضور',
+                      helperText: 'المسافة المسموحة لتسجيل الحضور والخروج',
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: monitoringRadiusController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'نطاق المراقبة أثناء الدوام (متر)',
+                      prefixIcon: Icon(Icons.radar),
+                      helperText: 'المسافة التي يُسمح للموظف بالابتعاد فيها أثناء العمل',
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -492,6 +510,7 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
                     latitude: selectedLat!,
                     longitude: selectedLng!,
                     allowedRadius: double.tryParse(radiusController.text) ?? 100,
+                    monitoringRadius: double.tryParse(monitoringRadiusController.text) ?? 400,
                     createdAt: store?.createdAt ?? DateTime.now(),
                   );
 

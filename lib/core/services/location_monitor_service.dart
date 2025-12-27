@@ -7,7 +7,7 @@ import '../models/attendance_model.dart';
 import 'notification_service.dart';
 
 /// Service to monitor employee location while checked in
-/// Alerts if employee moves too far from store (400+ meters)
+/// Alerts if employee moves outside the store's monitoring radius
 class LocationMonitorService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -20,9 +20,6 @@ class LocationMonitorService {
   static StoreModel? _currentStore;
   static AttendanceModel? _currentAttendance;
 
-  // Distance threshold in meters
-  static const double _alertDistanceMeters = 400.0;
-
   // Track if we already sent an alert (to avoid spam)
   static bool _alertSent = false;
   static DateTime? _lastAlertTime;
@@ -32,6 +29,9 @@ class LocationMonitorService {
 
   // Break pause state
   static bool _isPausedForBreak = false;
+
+  /// Get the monitoring radius from current store (or default 400m)
+  static double get _alertDistanceMeters => _currentStore?.monitoringRadius ?? 400.0;
 
   /// Start monitoring employee location using position stream
   static Future<void> startMonitoring({

@@ -6,7 +6,8 @@ class StoreModel {
   final String? phone;
   final double latitude; // Required - GPS coordinates
   final double longitude; // Required - GPS coordinates
-  final double allowedRadius; // meters for attendance check
+  final double allowedRadius; // meters for check-in/check-out
+  final double monitoringRadius; // meters for during-shift monitoring alerts
   final DateTime createdAt;
   final bool isActive;
 
@@ -18,7 +19,8 @@ class StoreModel {
     this.phone,
     required this.latitude,
     required this.longitude,
-    this.allowedRadius = 100,
+    this.allowedRadius = 100, // Default: 100m for check-in/out
+    this.monitoringRadius = 400, // Default: 400m for during-shift
     required this.createdAt,
     this.isActive = true,
   });
@@ -33,6 +35,7 @@ class StoreModel {
       latitude: (json['latitude'] as num).toDouble(),
       longitude: (json['longitude'] as num).toDouble(),
       allowedRadius: (json['allowedRadius'] as num?)?.toDouble() ?? 100,
+      monitoringRadius: (json['monitoringRadius'] as num?)?.toDouble() ?? 400,
       createdAt: DateTime.parse(json['createdAt'] as String),
       isActive: json['isActive'] as bool? ?? true,
     );
@@ -48,6 +51,7 @@ class StoreModel {
       'latitude': latitude,
       'longitude': longitude,
       'allowedRadius': allowedRadius,
+      'monitoringRadius': monitoringRadius,
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive,
     };
@@ -62,6 +66,7 @@ class StoreModel {
     double? latitude,
     double? longitude,
     double? allowedRadius,
+    double? monitoringRadius,
     DateTime? createdAt,
     bool? isActive,
   }) {
@@ -74,15 +79,22 @@ class StoreModel {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       allowedRadius: allowedRadius ?? this.allowedRadius,
+      monitoringRadius: monitoringRadius ?? this.monitoringRadius,
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
     );
   }
 
-  /// Check if a position is within allowed radius
+  /// Check if a position is within allowed radius (for check-in/out)
   bool isWithinRadius(double lat, double lng) {
     final distance = _calculateDistance(latitude, longitude, lat, lng);
     return distance <= allowedRadius;
+  }
+
+  /// Check if a position is within monitoring radius (for during-shift alerts)
+  bool isWithinMonitoringRadius(double lat, double lng) {
+    final distance = _calculateDistance(latitude, longitude, lat, lng);
+    return distance <= monitoringRadius;
   }
 
   /// Get distance from store in meters
@@ -93,17 +105,17 @@ class StoreModel {
   /// Calculate distance between two coordinates (Haversine formula)
   static double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const double earthRadius = 6371000; // meters
-    
+
     final dLat = _toRadians(lat2 - lat1);
     final dLon = _toRadians(lon2 - lon1);
-    
-    final a = 
+
+    final a =
         _sin(dLat / 2) * _sin(dLat / 2) +
         _cos(_toRadians(lat1)) * _cos(_toRadians(lat2)) *
         _sin(dLon / 2) * _sin(dLon / 2);
-    
+
     final c = 2 * _atan2(_sqrt(a), _sqrt(1 - a));
-    
+
     return earthRadius * c;
   }
 
@@ -120,7 +132,7 @@ class _Taylor {
     // Normalize to [-pi, pi]
     while (x > 3.141592653589793) x -= 2 * 3.141592653589793;
     while (x < -3.141592653589793) x += 2 * 3.141592653589793;
-    
+
     double result = x;
     double term = x;
     for (int i = 1; i <= 10; i++) {
