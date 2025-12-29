@@ -224,6 +224,12 @@ class RequestProvider extends ChangeNotifier {
           'targetUserId': _requests[index].employeeId,
           'skipPush': true, // Cloud Function onRequestUpdated handles push
         });
+
+        // Update vacation balance if this is a vacation request
+        if (_requests[index].type == RequestType.fullDayOff) {
+          final daysUsed = _requests[index].totalDays ?? 1;
+          await _updateVacationBalance(_requests[index].employeeId, daysUsed);
+        }
       }
 
       _isLoading = false;
@@ -403,6 +409,69 @@ class RequestProvider extends ChangeNotifier {
           r.type == RequestType.timeOff);
     } catch (e) {
       return null;
+    }
+  }
+
+  /// Check if employee has approved vacation for a specific date (supports multi-day)
+  RequestModel? getApprovedVacationForDate(String employeeId, DateTime date) {
+    try {
+      return _requests.firstWhere((r) =>
+          r.employeeId == employeeId &&
+          r.status == RequestStatus.approved &&
+          r.type == RequestType.fullDayOff &&
+          r.coversDate(date));
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Check if today is a vacation day for the employee
+  bool isOnVacationToday(String employeeId) {
+    final today = DateTime.now();
+    return getApprovedVacationForDate(employeeId, today) != null;
+  }
+
+  /// Get all approved vacations for an employee
+  List<RequestModel> getApprovedVacations(String employeeId) {
+    return _requests.where((r) =>
+        r.employeeId == employeeId &&
+        r.status == RequestStatus.approved &&
+        r.type == RequestType.fullDayOff).toList();
+  }
+
+  /// Get upcoming approved vacations for an employee
+  List<RequestModel> getUpcomingVacations(String employeeId) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _requests.where((r) =>
+        r.employeeId == employeeId &&
+        r.status == RequestStatus.approved &&
+        r.type == RequestType.fullDayOff &&
+        (r.endDate ?? r.targetDate).isAfter(today.subtract(const Duration(days: 1)))).toList();
+  }
+
+  /// Update employee vacation balance after approval
+  Future<void> _updateVacationBalance(String employeeId, int daysUsed) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(employeeId).get();
+      if (!userDoc.exists) return;
+
+      final currentYear = DateTime.now().year;
+      final data = userDoc.data()!;
+      final storedYear = data['vacationYear'] as int? ?? currentYear;
+      int currentUsed = data['usedVacationDays'] as int? ?? 0;
+
+      // Reset if year changed
+      if (storedYear != currentYear) {
+        currentUsed = 0;
+      }
+
+      await _firestore.collection('users').doc(employeeId).update({
+        'usedVacationDays': currentUsed + daysUsed,
+        'vacationYear': currentYear,
+      });
+    } catch (e) {
+      print('Error updating vacation balance: $e');
     }
   }
 

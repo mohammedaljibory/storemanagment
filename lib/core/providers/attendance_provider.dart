@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import '../services/notification_service.dart';
 import '../services/location_monitor_service.dart';
 import '../services/break_service.dart';
+import '../models/request_model.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -303,7 +304,16 @@ class AttendanceProvider extends ChangeNotifier {
 
       final now = DateTime.now();
 
-      // 1. Validate work day
+      // 1. Check if employee is on approved vacation
+      final vacationRequest = await _checkVacationForDate(userId, now);
+      if (vacationRequest != null) {
+        _isLoading = false;
+        _errorMessage = 'أنت في إجازة اليوم!\n${vacationRequest.dateRangeText}';
+        notifyListeners();
+        return false;
+      }
+
+      // 2. Validate work day
       if (!shift.isWorkDay(now)) {
         _isLoading = false;
         _errorMessage = 'اليوم ليس من أيام عملك\nأيام العمل: ${shift.workDaysText}';
@@ -311,7 +321,7 @@ class AttendanceProvider extends ChangeNotifier {
         return false;
       }
 
-      // 2. Validate time window
+      // 4. Validate time window
       final checkInResult = shift.canCheckIn(now);
       if (!checkInResult['allowed']) {
         _isLoading = false;
@@ -320,7 +330,7 @@ class AttendanceProvider extends ChangeNotifier {
         return false;
       }
 
-      // 3. Get current location
+      // 5. Get current location
       Position position;
       try {
         position = await _getCurrentLocation();
@@ -331,7 +341,7 @@ class AttendanceProvider extends ChangeNotifier {
         return false;
       }
 
-      // 4. Validate distance from store
+      // 6. Validate distance from store
       final distance = store.getDistanceFrom(position.latitude, position.longitude);
       if (!store.isWithinRadius(position.latitude, position.longitude)) {
         _isLoading = false;
@@ -342,10 +352,10 @@ class AttendanceProvider extends ChangeNotifier {
         return false;
       }
 
-      // 5. Calculate expected end time (handles overnight shifts)
+      // 7. Calculate expected end time (handles overnight shifts)
       final expectedEndTime = shift.endDateTimeFromCheckIn(now);
 
-      // 6. Calculate penalty minutes (late minutes beyond tolerance = penalty)
+      // 8. Calculate penalty minutes (late minutes beyond tolerance = penalty)
       final int lateMinutes = checkInResult['lateMinutes'] ?? 0;
       final bool isLate = checkInResult['isLate'] ?? false;
       int penaltyMinutes = 0;
@@ -356,7 +366,7 @@ class AttendanceProvider extends ChangeNotifier {
         penaltyMinutes = lateMinutes;
       }
 
-      // 7. Create attendance record
+      // 9. Create attendance record
       final attendance = AttendanceModel(
         id: '',
         userId: userId,
@@ -378,7 +388,7 @@ class AttendanceProvider extends ChangeNotifier {
         penaltyMinutes: penaltyMinutes,
       );
 
-      // 7. Check connectivity and save
+      // 10. Check connectivity and save
       final hasConnection = await _hasConnectivity();
       
       if (hasConnection) {
@@ -410,13 +420,13 @@ class AttendanceProvider extends ChangeNotifier {
         _errorMessage = 'تم تسجيل الحضور محلياً (بدون إنترنت)\nسيتم المزامنة عند توفر الاتصال';
       }
 
-      // 8. Schedule sign-out reminders
+      // 11. Schedule sign-out reminders
       await NotificationService.scheduleSignOutReminders(
         shiftEndTime: expectedEndTime,
         employeeName: userName,
       );
 
-      // 9. Notify if late
+      // 12. Notify if late
       if (checkInResult['isLate'] == true) {
         NotificationService.notifyLateAttendance(
           userName,
@@ -424,10 +434,10 @@ class AttendanceProvider extends ChangeNotifier {
         );
       }
 
-      // 10. Notify check-in success
+      // 13. Notify check-in success
       NotificationService.notifyCheckInSuccess(shift.name, expectedEndTime);
 
-      // 11. Start location monitoring (alerts if employee moves away from store)
+      // 14. Start location monitoring (alerts if employee moves away from store)
       final savedAttendanceForMonitor = _todayAttendance ?? _currentSession;
       if (savedAttendanceForMonitor != null) {
         await LocationMonitorService.startMonitoring(
@@ -438,7 +448,7 @@ class AttendanceProvider extends ChangeNotifier {
         );
       }
 
-      // 12. Notify admin of check-in
+      // 15. Notify admin of check-in
       await LocationMonitorService.notifyAdminOfCheckIn(
         userId: userId,
         userName: userName,
@@ -663,6 +673,54 @@ class AttendanceProvider extends ChangeNotifier {
     return await Geolocator.getCurrentPosition(
       desiredAccuracy: LocationAccuracy.high,
     );
+  }
+
+  // ============ VACATION CHECK ============
+
+  /// Check if employee has approved vacation for a specific date
+  Future<RequestModel?> _checkVacationForDate(String userId, DateTime date) async {
+    try {
+      final checkDate = DateTime(date.year, date.month, date.day);
+
+      // Query approved vacation requests that might cover this date
+      final snapshot = await _firestore
+          .collection('requests')
+          .where('employeeId', isEqualTo: userId)
+          .where('status', isEqualTo: 'approved')
+          .where('type', isEqualTo: 'fullDayOff')
+          .get();
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        data['id'] = doc.id;
+
+        // Convert timestamps
+        if (data['requestDate'] is Timestamp) {
+          data['requestDate'] = (data['requestDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['targetDate'] is Timestamp) {
+          data['targetDate'] = (data['targetDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['endDate'] is Timestamp) {
+          data['endDate'] = (data['endDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['respondedAt'] is Timestamp) {
+          data['respondedAt'] = (data['respondedAt'] as Timestamp).toDate().toIso8601String();
+        }
+
+        final request = RequestModel.fromJson(data);
+
+        // Check if this vacation covers today
+        if (request.coversDate(checkDate)) {
+          return request;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      print('Error checking vacation: $e');
+      return null;
+    }
   }
 
   // ============ HELPERS ============

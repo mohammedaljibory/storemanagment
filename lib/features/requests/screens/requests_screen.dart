@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/models/request_model.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 
@@ -104,6 +105,101 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                   ],
                 ),
               ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+
+              // Vacation Balance Card
+              Consumer<AuthProvider>(
+                builder: (context, authProvider, _) {
+                  final user = authProvider.user;
+                  if (user == null || user.allowedVacationDays <= 0) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: GlassContainer(
+                      margin: const EdgeInsets.only(bottom: 15),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.beach_access,
+                              color: AppTheme.primaryColor,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 15),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'رصيد الإجازات',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      '${user.remainingVacationDays}',
+                                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                    ),
+                                    Text(
+                                      ' / ${user.allowedVacationDays} يوم',
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                            color: Colors.grey,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Progress indicator
+                          SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: Stack(
+                              children: [
+                                CircularProgressIndicator(
+                                  value: user.allowedVacationDays > 0
+                                      ? user.remainingVacationDays / user.allowedVacationDays
+                                      : 0,
+                                  backgroundColor: Colors.grey.withOpacity(0.3),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    user.remainingVacationDays > 0
+                                        ? AppTheme.primaryColor
+                                        : AppTheme.errorColor,
+                                  ),
+                                  strokeWidth: 6,
+                                ),
+                                Center(
+                                  child: Text(
+                                    '${((user.remainingVacationDays / user.allowedVacationDays) * 100).round()}%',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ).animate().fadeIn(delay: 300.ms, duration: 600.ms).slideY(begin: 0.1, end: 0);
+                },
+              ),
 
               // Tab Bar
               Container(
@@ -280,7 +376,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                           ),
                     ),
                     Text(
-                      request.formattedTargetDate,
+                      request.isMultiDay ? request.dateRangeText : request.formattedTargetDate,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Colors.grey,
                           ),
@@ -397,7 +493,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
     if (user == null) return;
 
     RequestType selectedType = RequestType.timeOff;
-    DateTime selectedDate = DateTime.now();
+    DateTime startDate = DateTime.now().add(const Duration(days: 1));
+    DateTime? endDate; // For multi-day vacation
+    bool isMultiDay = false;
     TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
     TimeOfDay endTime = const TimeOfDay(hour: 12, minute: 0);
     final reasonController = TextEditingController();
@@ -406,6 +504,16 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
+          // Calculate total vacation days
+          int totalDays = 1;
+          if (isMultiDay && endDate != null) {
+            totalDays = endDate!.difference(startDate).inDays + 1;
+          }
+
+          // Check if user has enough vacation balance
+          final hasBalance = user.hasVacationBalance(totalDays);
+          final remainingBalance = user.remainingVacationDays;
+
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             title: Row(
@@ -439,7 +547,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                       ),
                       ButtonSegment(
                         value: RequestType.fullDayOff,
-                        label: Text('إجازة يوم'),
+                        label: Text('إجازة'),
                         icon: Icon(Icons.calendar_today),
                       ),
                     ],
@@ -447,25 +555,97 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     onSelectionChanged: (Set<RequestType> newSelection) {
                       setState(() {
                         selectedType = newSelection.first;
+                        if (selectedType == RequestType.timeOff) {
+                          isMultiDay = false;
+                          endDate = null;
+                        }
                       });
                     },
                   ),
                   const SizedBox(height: 20),
 
-                  // Date Picker
-                  const Text('التاريخ:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  // Multi-day toggle for vacation
+                  if (selectedType == RequestType.fullDayOff) ...[
+                    Row(
+                      children: [
+                        const Text('إجازة متعددة الأيام:', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const Spacer(),
+                        Switch(
+                          value: isMultiDay,
+                          onChanged: (value) {
+                            setState(() {
+                              isMultiDay = value;
+                              if (!value) {
+                                endDate = null;
+                              } else {
+                                endDate = startDate.add(const Duration(days: 1));
+                              }
+                            });
+                          },
+                          activeColor: AppTheme.primaryColor,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Vacation balance warning
+                    if (user.allowedVacationDays > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: hasBalance
+                              ? AppTheme.primaryColor.withOpacity(0.1)
+                              : AppTheme.errorColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              hasBalance ? Icons.info_outline : Icons.warning_amber,
+                              color: hasBalance ? AppTheme.primaryColor : AppTheme.errorColor,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                hasBalance
+                                    ? 'رصيدك المتبقي: $remainingBalance يوم (تطلب $totalDays يوم)'
+                                    : 'رصيدك غير كافٍ! المتبقي: $remainingBalance يوم',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: hasBalance ? AppTheme.primaryColor : AppTheme.errorColor,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+                    ],
+                  ],
+
+                  // Start Date Picker
+                  Text(
+                    isMultiDay ? 'تاريخ البداية:' : 'التاريخ:',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 8),
                   InkWell(
                     onTap: () async {
                       final date = await showDatePicker(
                         context: context,
-                        initialDate: selectedDate,
+                        initialDate: startDate,
                         firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 90)),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
                       );
                       if (date != null) {
                         setState(() {
-                          selectedDate = date;
+                          startDate = date;
+                          // Adjust end date if needed
+                          if (endDate != null && endDate!.isBefore(startDate)) {
+                            endDate = startDate.add(const Duration(days: 1));
+                          }
                         });
                       }
                     },
@@ -480,14 +660,81 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                           const Icon(Icons.calendar_today, color: AppTheme.primaryColor),
                           const SizedBox(width: 10),
                           Text(
-                            '${selectedDate.day}/${selectedDate.month}/${selectedDate.year}',
+                            '${startDate.day}/${startDate.month}/${startDate.year}',
                             style: const TextStyle(fontSize: 16),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 15),
+
+                  // End Date Picker (for multi-day)
+                  if (isMultiDay) ...[
+                    const Text('تاريخ النهاية:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    InkWell(
+                      onTap: () async {
+                        // Calculate max end date based on remaining balance
+                        final maxDays = remainingBalance > 0 ? remainingBalance - 1 : 0;
+                        final maxEndDate = startDate.add(Duration(days: maxDays));
+
+                        final date = await showDatePicker(
+                          context: context,
+                          initialDate: endDate ?? startDate.add(const Duration(days: 1)),
+                          firstDate: startDate.add(const Duration(days: 1)),
+                          lastDate: user.allowedVacationDays > 0
+                              ? maxEndDate
+                              : DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (date != null) {
+                          setState(() {
+                            endDate = date;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.event, color: AppTheme.primaryColor),
+                            const SizedBox(width: 10),
+                            Text(
+                              endDate != null
+                                  ? '${endDate!.day}/${endDate!.month}/${endDate!.year}'
+                                  : 'اختر تاريخ النهاية',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: endDate != null ? null : Colors.grey,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (totalDays > 1)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryColor.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '$totalDays أيام',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primaryColor,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                  ],
 
                   // Time Range (only for time-off)
                   if (selectedType == RequestType.timeOff) ...[
@@ -596,6 +843,25 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     return;
                   }
 
+                  // Validate multi-day vacation
+                  if (selectedType == RequestType.fullDayOff && isMultiDay && endDate == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('يرجى اختيار تاريخ النهاية')),
+                    );
+                    return;
+                  }
+
+                  // Validate vacation balance
+                  if (selectedType == RequestType.fullDayOff && user.allowedVacationDays > 0 && !hasBalance) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('رصيد الإجازات غير كافٍ'),
+                        backgroundColor: AppTheme.errorColor,
+                      ),
+                    );
+                    return;
+                  }
+
                   int? durationMinutes;
                   String? startTimeStr;
                   String? endTimeStr;
@@ -603,7 +869,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                   if (selectedType == RequestType.timeOff) {
                     startTimeStr = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}';
                     endTimeStr = '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
-                    
+
                     final startMinutes = startTime.hour * 60 + startTime.minute;
                     final endMinutes = endTime.hour * 60 + endTime.minute;
                     durationMinutes = endMinutes - startMinutes;
@@ -624,7 +890,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     storeName: user.storeName ?? '',
                     type: selectedType,
                     requestDate: DateTime.now(),
-                    targetDate: selectedDate,
+                    targetDate: startDate,
+                    endDate: isMultiDay ? endDate : null,
+                    totalDays: selectedType == RequestType.fullDayOff ? totalDays : null,
                     startTime: startTimeStr,
                     endTime: endTimeStr,
                     durationMinutes: durationMinutes,

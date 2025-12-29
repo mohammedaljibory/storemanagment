@@ -263,6 +263,16 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.warningColor)),
                       ],
                     ),
+                  // Show vacation balance
+                  if (employee.allowedVacationDays > 0)
+                    Row(
+                      children: [
+                        const Icon(Icons.beach_access, size: 14, color: AppTheme.primaryColor),
+                        const SizedBox(width: 4),
+                        Text('رصيد الإجازات: ${employee.remainingVacationDays}/${employee.allowedVacationDays}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.primaryColor)),
+                      ],
+                    ),
                 ],
               ),
             ),
@@ -281,6 +291,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final phoneController = TextEditingController();
     final passwordController = TextEditingController();
     final daysOffController = TextEditingController(text: '0');
+    final vacationDaysController = TextEditingController(text: '0');
     StoreModel? selectedStore;
     ShiftModel? selectedShift;
 
@@ -339,6 +350,17 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       labelText: 'أيام الإجازة شهرياً',
                       prefixIcon: Icon(Icons.event_busy),
                       hintText: '0',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: vacationDaysController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'رصيد الإجازات السنوية',
+                      prefixIcon: Icon(Icons.beach_access),
+                      hintText: '0',
+                      helperText: 'عدد أيام الإجازة المسموحة سنوياً',
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -408,6 +430,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       shiftId: selectedShift!.id,
                       shiftName: selectedShift!.name,
                       daysOffPerMonth: int.tryParse(daysOffController.text) ?? 0,
+                      allowedVacationDays: int.tryParse(vacationDaysController.text) ?? 0,
                     );
 
                     // Close loading

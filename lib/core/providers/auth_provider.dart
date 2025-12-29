@@ -156,9 +156,8 @@ class AuthProvider extends ChangeNotifier {
     required String storeName,
     required String shiftId,
     required String shiftName,
-    int daysOffPerMonth = 0,  // Add this
-
-
+    int daysOffPerMonth = 0,
+    int allowedVacationDays = 0,
   }) async {
     try {
       _isLoading = true;
@@ -185,7 +184,9 @@ class AuthProvider extends ChangeNotifier {
           createdAt: DateTime.now(),
           isActive: true,
           daysOffPerMonth: daysOffPerMonth,
-
+          allowedVacationDays: allowedVacationDays,
+          usedVacationDays: 0,
+          vacationYear: DateTime.now().year,
         );
 
         await _firestore

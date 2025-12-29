@@ -305,6 +305,15 @@ class _DashboardTabState extends State<DashboardTab> {
                 const SizedBox(height: 15),
               ],
 
+              // Vacation Greeting Card
+              if (user != null && requestProvider.isOnVacationToday(user.id)) ...[
+                _buildVacationGreetingCard(context, user.id, requestProvider, isDarkMode)
+                    .animate()
+                    .fadeIn(delay: 150.ms, duration: 600.ms)
+                    .slideY(begin: 0.2, end: 0),
+                const SizedBox(height: 15),
+              ],
+
               // Check In/Out Card
               _buildCheckInCard(
                 context,
@@ -520,6 +529,112 @@ class _DashboardTabState extends State<DashboardTab> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVacationGreetingCard(
+    BuildContext context,
+    String userId,
+    RequestProvider requestProvider,
+    bool isDarkMode,
+  ) {
+    final vacation = requestProvider.getApprovedVacationForDate(userId, DateTime.now());
+    if (vacation == null) return const SizedBox.shrink();
+
+    return GlassContainer(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primaryColor.withOpacity(0.15),
+              AppTheme.secondaryColor.withOpacity(0.15),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF4CAF50), Color(0xFF2E7D32)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF4CAF50).withOpacity(0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.beach_access,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'استمتع بإجازتك!',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF2E7D32),
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        vacation.isMultiDay
+                            ? vacation.dateRangeText
+                            : vacation.formattedTargetDate,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: isDarkMode ? Colors.white70 : Colors.black54,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (isDarkMode ? Colors.white : Colors.black).withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.spa,
+                    color: Color(0xFF4CAF50),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'نتمنى لك راحة واستجمام طيب',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontStyle: FontStyle.italic,
+                          color: isDarkMode ? Colors.white70 : Colors.black54,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

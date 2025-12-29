@@ -16,7 +16,12 @@ class UserModel {
   final DateTime createdAt;
   final bool isActive;
   final int daysOffPerMonth;
-  
+
+  // Vacation balance tracking
+  final int allowedVacationDays;    // Total vacation days allowed per year (set by admin)
+  final int usedVacationDays;       // Vacation days used this year
+  final int vacationYear;           // Year for vacation tracking (resets annually)
+
   // NEW: Temporary shift override fields
   final String? temporaryShiftId;
   final String? temporaryShiftName;
@@ -40,6 +45,9 @@ class UserModel {
     required this.createdAt,
     this.isActive = true,
     this.daysOffPerMonth = 0,
+    this.allowedVacationDays = 0,
+    this.usedVacationDays = 0,
+    this.vacationYear = 0,
     this.temporaryShiftId,
     this.temporaryShiftName,
     this.temporaryShiftDate,
@@ -62,6 +70,9 @@ class UserModel {
       createdAt: _parseDateTime(json['createdAt']),
       isActive: json['isActive'] as bool? ?? true,
       daysOffPerMonth: json['daysOffPerMonth'] as int? ?? 0,
+      allowedVacationDays: json['allowedVacationDays'] as int? ?? 0,
+      usedVacationDays: json['usedVacationDays'] as int? ?? 0,
+      vacationYear: json['vacationYear'] as int? ?? DateTime.now().year,
       temporaryShiftId: json['temporaryShiftId'] as String?,
       temporaryShiftName: json['temporaryShiftName'] as String?,
       temporaryShiftDate: _parseDateTimeNullable(json['temporaryShiftDate']),
@@ -150,6 +161,9 @@ class UserModel {
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive,
       'daysOffPerMonth': daysOffPerMonth,
+      'allowedVacationDays': allowedVacationDays,
+      'usedVacationDays': usedVacationDays,
+      'vacationYear': vacationYear,
       'temporaryShiftId': temporaryShiftId,
       'temporaryShiftName': temporaryShiftName,
       'temporaryShiftDate': temporaryShiftDate?.toIso8601String(),
@@ -172,6 +186,9 @@ class UserModel {
     DateTime? createdAt,
     bool? isActive,
     int? daysOffPerMonth,
+    int? allowedVacationDays,
+    int? usedVacationDays,
+    int? vacationYear,
     String? temporaryShiftId,
     String? temporaryShiftName,
     DateTime? temporaryShiftDate,
@@ -192,6 +209,9 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
       daysOffPerMonth: daysOffPerMonth ?? this.daysOffPerMonth,
+      allowedVacationDays: allowedVacationDays ?? this.allowedVacationDays,
+      usedVacationDays: usedVacationDays ?? this.usedVacationDays,
+      vacationYear: vacationYear ?? this.vacationYear,
       temporaryShiftId: temporaryShiftId ?? this.temporaryShiftId,
       temporaryShiftName: temporaryShiftName ?? this.temporaryShiftName,
       temporaryShiftDate: temporaryShiftDate ?? this.temporaryShiftDate,
@@ -216,12 +236,32 @@ class UserModel {
       createdAt: createdAt,
       isActive: isActive,
       daysOffPerMonth: daysOffPerMonth,
+      allowedVacationDays: allowedVacationDays,
+      usedVacationDays: usedVacationDays,
+      vacationYear: vacationYear,
       temporaryShiftId: null,
       temporaryShiftName: null,
       temporaryShiftDate: null,
       temporaryShiftExpiry: null,
       fcmTokens: fcmTokens,
     );
+  }
+
+  // ============ VACATION HELPERS ============
+
+  /// Get remaining vacation days
+  int get remainingVacationDays {
+    final currentYear = DateTime.now().year;
+    // Reset if year changed
+    if (vacationYear != currentYear) {
+      return allowedVacationDays;
+    }
+    return allowedVacationDays - usedVacationDays;
+  }
+
+  /// Check if user has vacation balance available
+  bool hasVacationBalance(int days) {
+    return remainingVacationDays >= days;
   }
 
   /// Check if user is admin

@@ -22,7 +22,9 @@ class RequestModel {
   final RequestType type;
   final RequestStatus status;
   final DateTime requestDate;      // تاريخ تقديم الطلب
-  final DateTime targetDate;       // التاريخ المطلوب
+  final DateTime targetDate;       // التاريخ المطلوب (أو تاريخ البداية للإجازات المتعددة الأيام)
+  final DateTime? endDate;         // تاريخ النهاية (للإجازات المتعددة الأيام)
+  final int? totalDays;            // إجمالي أيام الإجازة
   final String? startTime;         // وقت البداية (للزمنية)
   final String? endTime;           // وقت النهاية (للزمنية)
   final int? durationMinutes;      // مدة الزمنية بالدقائق
@@ -45,6 +47,8 @@ class RequestModel {
     this.status = RequestStatus.pending,
     required this.requestDate,
     required this.targetDate,
+    this.endDate,
+    this.totalDays,
     this.startTime,
     this.endTime,
     this.durationMinutes,
@@ -75,6 +79,8 @@ class RequestModel {
       ),
       requestDate: DateTime.parse(json['requestDate'] as String),
       targetDate: DateTime.parse(json['targetDate'] as String),
+      endDate: json['endDate'] != null ? DateTime.parse(json['endDate'] as String) : null,
+      totalDays: json['totalDays'] as int?,
       startTime: json['startTime'] as String?,
       endTime: json['endTime'] as String?,
       durationMinutes: json['durationMinutes'] as int?,
@@ -102,6 +108,8 @@ class RequestModel {
       'status': status.toString().split('.').last,
       'requestDate': requestDate.toIso8601String(),
       'targetDate': targetDate.toIso8601String(),
+      'endDate': endDate?.toIso8601String(),
+      'totalDays': totalDays,
       'startTime': startTime,
       'endTime': endTime,
       'durationMinutes': durationMinutes,
@@ -126,6 +134,8 @@ class RequestModel {
     RequestStatus? status,
     DateTime? requestDate,
     DateTime? targetDate,
+    DateTime? endDate,
+    int? totalDays,
     String? startTime,
     String? endTime,
     int? durationMinutes,
@@ -148,6 +158,8 @@ class RequestModel {
       status: status ?? this.status,
       requestDate: requestDate ?? this.requestDate,
       targetDate: targetDate ?? this.targetDate,
+      endDate: endDate ?? this.endDate,
+      totalDays: totalDays ?? this.totalDays,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
       durationMinutes: durationMinutes ?? this.durationMinutes,
@@ -227,4 +239,55 @@ class RequestModel {
   bool get isPending => status == RequestStatus.pending;
   bool get isApproved => status == RequestStatus.approved;
   bool get isRejected => status == RequestStatus.rejected;
+
+  /// Check if this is a multi-day vacation request
+  bool get isMultiDay => endDate != null && totalDays != null && totalDays! > 1;
+
+  /// Get all dates covered by this vacation request
+  List<DateTime> get vacationDates {
+    if (type != RequestType.fullDayOff) return [];
+
+    final List<DateTime> dates = [];
+    final start = DateTime(targetDate.year, targetDate.month, targetDate.day);
+    final end = endDate != null
+        ? DateTime(endDate!.year, endDate!.month, endDate!.day)
+        : start;
+
+    for (DateTime d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      dates.add(d);
+    }
+    return dates;
+  }
+
+  /// Check if a specific date is covered by this vacation
+  bool coversDate(DateTime date) {
+    if (type != RequestType.fullDayOff) return false;
+
+    final checkDate = DateTime(date.year, date.month, date.day);
+    final start = DateTime(targetDate.year, targetDate.month, targetDate.day);
+
+    if (endDate == null) {
+      return checkDate == start;
+    }
+
+    final end = DateTime(endDate!.year, endDate!.month, endDate!.day);
+    return !checkDate.isBefore(start) && !checkDate.isAfter(end);
+  }
+
+  /// Get formatted date range text
+  String get dateRangeText {
+    if (endDate == null || !isMultiDay) {
+      return formattedTargetDate;
+    }
+
+    const months = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+
+    final startStr = '${targetDate.day} ${months[targetDate.month - 1]}';
+    final endStr = '${endDate!.day} ${months[endDate!.month - 1]} ${endDate!.year}';
+
+    return '$startStr - $endStr ($totalDays أيام)';
+  }
 }
