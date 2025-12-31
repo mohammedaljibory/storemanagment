@@ -227,6 +227,16 @@ class _DashboardTabState extends State<DashboardTab> {
               
               const SizedBox(height: 20),
 
+              // Offline Sync Indicator
+              if (attendanceProvider.hasOfflineData)
+                _buildOfflineSyncIndicator(context, attendanceProvider, isDarkMode)
+                    .animate()
+                    .fadeIn(duration: 400.ms)
+                    .slideY(begin: -0.2, end: 0),
+
+              if (attendanceProvider.hasOfflineData)
+                const SizedBox(height: 15),
+
               // Shift Info Card
               if (user != null) ...[
                 GlassContainer(
@@ -1168,6 +1178,125 @@ class _DashboardTabState extends State<DashboardTab> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Widget _buildOfflineSyncIndicator(
+    BuildContext context,
+    AttendanceProvider attendanceProvider,
+    bool isDarkMode,
+  ) {
+    final pendingCount = attendanceProvider.offlineQueue.length;
+
+    return GlassContainer(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.warningColor.withOpacity(0.15),
+              AppTheme.warningColor.withOpacity(0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppTheme.warningColor.withOpacity(0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.warningColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.cloud_off,
+                color: AppTheme.warningColor,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'بيانات في انتظار المزامنة',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.warningColor,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$pendingCount عملية معلقة - ستتم المزامنة عند توفر الإنترنت',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: isDarkMode ? Colors.white60 : Colors.black54,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: () async {
+                await attendanceProvider.syncOfflineData();
+                if (context.mounted) {
+                  if (attendanceProvider.hasOfflineData) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Row(
+                          children: [
+                            Icon(Icons.wifi_off, color: Colors.white),
+                            SizedBox(width: 10),
+                            Text('لا يوجد اتصال بالإنترنت'),
+                          ],
+                        ),
+                        backgroundColor: AppTheme.warningColor,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Row(
+                          children: [
+                            Icon(Icons.cloud_done, color: Colors.white),
+                            SizedBox(width: 10),
+                            Text('تمت المزامنة بنجاح'),
+                          ],
+                        ),
+                        backgroundColor: AppTheme.successColor,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.warningColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.sync,
+                  color: AppTheme.warningColor,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
