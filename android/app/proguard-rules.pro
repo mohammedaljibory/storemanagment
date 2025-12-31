@@ -14,3 +14,11 @@
 -keepclassmembers class * {
     native <methods>;
 }
+
+# Google Play Core (for deferred components)
+-dontwarn com.google.android.play.core.splitcompat.SplitCompatApplication
+-dontwarn com.google.android.play.core.splitinstall.**
+-dontwarn com.google.android.play.core.tasks.**
+
+# Keep Play Core classes
+-keep class com.google.android.play.core.** { *; }
