@@ -66,7 +66,6 @@ class AttendanceProvider extends ChangeNotifier {
       'earlyLeaveDays': earlyLeaveDays,
       'onTimeDays': onTimeDays,
       'totalHours': totalHours,
-      'averageHours': totalDays > 0 ? totalHours / totalDays : 0.0,
       'averageHoursPerDay': totalDays > 0 ? totalHours / totalDays : 0.0,
       'totalLateMinutes': totalLateMinutes,
     };
@@ -175,7 +174,7 @@ class AttendanceProvider extends ChangeNotifier {
           .collection('attendance')
           .where('userId', isEqualTo: userId)
           .orderBy('checkIn', descending: true)
-          .limit(100)
+          .limit(365)
           .get();
 
       _attendanceHistory = snapshot.docs.map((doc) {
@@ -765,6 +764,85 @@ class AttendanceProvider extends ChangeNotifier {
               _convertTimestamps(data);
               return AttendanceModel.fromJson(data);
             }).toList());
+  }
+
+  // ============ ADMIN MONTHLY STATISTICS ============
+
+  Map<String, dynamic> _adminMonthlyStats = {};
+  Map<String, dynamic> get adminMonthlyStats => {..._adminMonthlyStats};
+
+  /// Fetch monthly statistics for all employees (for admin dashboard)
+  Future<void> fetchAdminMonthlyStats() async {
+    try {
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+      final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+      final snapshot = await _firestore
+          .collection('attendance')
+          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
+          .where('checkIn', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
+          .get();
+
+      int totalAttendance = snapshot.docs.length;
+      int lateCount = 0;
+      int onTimeCount = 0;
+      int earlyLeaveCount = 0;
+      double totalHours = 0;
+      Set<String> uniqueEmployees = {};
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        uniqueEmployees.add(data['userId'] ?? '');
+
+        if (data['isLate'] == true) lateCount++;
+        else onTimeCount++;
+
+        if (data['isEarlyLeave'] == true) earlyLeaveCount++;
+
+        if (data['totalHours'] != null) {
+          totalHours += (data['totalHours'] as num).toDouble();
+        }
+      }
+
+      // Today's stats
+      final startOfToday = DateTime(now.year, now.month, now.day);
+      final endOfToday = startOfToday.add(const Duration(days: 1));
+
+      final todaySnapshot = await _firestore
+          .collection('attendance')
+          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
+          .where('checkIn', isLessThan: Timestamp.fromDate(endOfToday))
+          .get();
+
+      int todayTotal = todaySnapshot.docs.length;
+      int todayLate = 0;
+      int todayOnTime = 0;
+
+      for (var doc in todaySnapshot.docs) {
+        final data = doc.data();
+        if (data['isLate'] == true) todayLate++;
+        else todayOnTime++;
+      }
+
+      _adminMonthlyStats = {
+        'monthlyTotal': totalAttendance,
+        'monthlyLate': lateCount,
+        'monthlyOnTime': onTimeCount,
+        'monthlyEarlyLeave': earlyLeaveCount,
+        'monthlyTotalHours': totalHours,
+        'monthlyUniqueEmployees': uniqueEmployees.length,
+        'todayTotal': todayTotal,
+        'todayLate': todayLate,
+        'todayOnTime': todayOnTime,
+        'latePercentage': totalAttendance > 0 ? (lateCount / totalAttendance * 100) : 0.0,
+        'onTimePercentage': totalAttendance > 0 ? (onTimeCount / totalAttendance * 100) : 0.0,
+      };
+
+      notifyListeners();
+    } catch (e) {
+      print('Error fetching admin monthly stats: $e');
+    }
   }
 
   // ============ ACTIVE EMPLOYEES (FOR ADMIN) ============

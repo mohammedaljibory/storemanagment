@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +23,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Stream<List<AttendanceModel>>? _activeAttendanceStream;
+  Timer? _durationRefreshTimer;
 
   @override
   void initState() {
@@ -35,11 +37,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _activeAttendanceStream = context.read<AttendanceProvider>().activeAttendanceStream();
       });
     });
+    // Auto-refresh duration every minute
+    _durationRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    // Don't stop listener here - keep it running while app is open
+    _durationRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -51,6 +57,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       await context.read<TaskProvider>().fetchTasks();
       await context.read<RequestProvider>().fetchAllRequests();
       await context.read<AttendanceProvider>().fetchActiveAttendance();
+      await context.read<AttendanceProvider>().fetchAdminMonthlyStats();
     }
   }
 
@@ -88,6 +95,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   // Active Employees Section
                   _buildActiveEmployeesSection(context),
+                  const SizedBox(height: 25),
+
+                  // Monthly Statistics Section
+                  _buildMonthlyStatsSection(context),
                   const SizedBox(height: 25),
 
                   // Management Cards
@@ -461,6 +472,285 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     ).animate()
         .fadeIn(delay: Duration(milliseconds: 400 + (index * 100)), duration: 600.ms)
         .slideX(begin: 0.2, end: 0);
+  }
+
+  Widget _buildMonthlyStatsSection(BuildContext context) {
+    final attendanceProvider = context.watch<AttendanceProvider>();
+    final stats = attendanceProvider.adminMonthlyStats;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    // Get month name in Arabic
+    final monthNames = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+    final currentMonth = monthNames[DateTime.now().month - 1];
+
+    final todayTotal = stats['todayTotal'] ?? 0;
+    final todayLate = stats['todayLate'] ?? 0;
+    final todayOnTime = stats['todayOnTime'] ?? 0;
+    final monthlyTotal = stats['monthlyTotal'] ?? 0;
+    final monthlyLate = stats['monthlyLate'] ?? 0;
+    final monthlyOnTime = stats['monthlyOnTime'] ?? 0;
+    final onTimePercentage = stats['onTimePercentage'] ?? 0.0;
+    final totalHours = stats['monthlyTotalHours'] ?? 0.0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.analytics, color: AppTheme.primaryColor),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'إحصائيات الحضور',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+        const SizedBox(height: 15),
+
+        // Today's Stats
+        GlassContainer(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.today, size: 18, color: AppTheme.secondaryColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    'إحصائيات اليوم',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.secondaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMiniStatCard(
+                      context,
+                      'إجمالي الحضور',
+                      '$todayTotal',
+                      Icons.people,
+                      AppTheme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMiniStatCard(
+                      context,
+                      'في الوقت',
+                      '$todayOnTime',
+                      Icons.check_circle,
+                      AppTheme.successColor,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMiniStatCard(
+                      context,
+                      'متأخرين',
+                      '$todayLate',
+                      Icons.schedule,
+                      AppTheme.warningColor,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ).animate().fadeIn(delay: 400.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+
+        const SizedBox(height: 15),
+
+        // Monthly Stats
+        GlassContainer(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.calendar_month, size: 18, color: AppTheme.primaryColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    'إحصائيات شهر $currentMonth',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.primaryColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMiniStatCard(
+                      context,
+                      'إجمالي الحضور',
+                      '$monthlyTotal',
+                      Icons.event_available,
+                      AppTheme.primaryColor,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMiniStatCard(
+                      context,
+                      'في الوقت',
+                      '$monthlyOnTime',
+                      Icons.thumb_up,
+                      AppTheme.successColor,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildMiniStatCard(
+                      context,
+                      'متأخرين',
+                      '$monthlyLate',
+                      Icons.thumb_down,
+                      AppTheme.errorColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 15),
+              // Performance Bar
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'نسبة الانضباط',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isDarkMode ? Colors.white70 : Colors.black54,
+                        ),
+                      ),
+                      Text(
+                        '${onTimePercentage.toStringAsFixed(1)}%',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: onTimePercentage >= 80
+                              ? AppTheme.successColor
+                              : onTimePercentage >= 60
+                                  ? AppTheme.warningColor
+                                  : AppTheme.errorColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      value: onTimePercentage / 100,
+                      minHeight: 10,
+                      backgroundColor: (isDarkMode ? Colors.white : Colors.black).withOpacity(0.1),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        onTimePercentage >= 80
+                            ? AppTheme.successColor
+                            : onTimePercentage >= 60
+                                ? AppTheme.warningColor
+                                : AppTheme.errorColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Total Hours
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.access_time_filled,
+                        size: 16,
+                        color: isDarkMode ? Colors.white54 : Colors.black54,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'إجمالي ساعات العمل',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: isDarkMode ? Colors.white70 : Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '${totalHours.toStringAsFixed(1)} ساعة',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.secondaryColor,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ).animate().fadeIn(delay: 500.ms, duration: 600.ms).slideY(begin: 0.1, end: 0),
+      ],
+    );
+  }
+
+  Widget _buildMiniStatCard(
+    BuildContext context,
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: isDarkMode ? Colors.white60 : Colors.black54,
+              fontSize: 10,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildManagementSection(BuildContext context) {
