@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/models/request_model.dart';
+import '../../../core/services/break_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 
@@ -16,11 +18,12 @@ class AdminRequestsScreen extends StatefulWidget {
 
 class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final BreakService _breakService = BreakService();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadData();
   }
 
@@ -78,27 +81,35 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                           ),
                     ),
                     const Spacer(),
-                    Consumer<RequestProvider>(
-                      builder: (context, provider, _) {
-                        final pendingCount = provider.pendingCount;
-                        if (pendingCount > 0) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.warningColor,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              '$pendingCount طلب جديد',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          );
-                        }
-                        return const SizedBox();
+                    StreamBuilder<QuerySnapshot>(
+                      stream: _breakService.pendingBreakRequestsStream(),
+                      builder: (context, breakSnapshot) {
+                        return Consumer<RequestProvider>(
+                          builder: (context, provider, _) {
+                            final requestCount = provider.pendingCount;
+                            final breakCount = breakSnapshot.data?.docs.length ?? 0;
+                            final totalCount = requestCount + breakCount;
+
+                            if (totalCount > 0) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warningColor,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '$totalCount طلب جديد',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              );
+                            }
+                            return const SizedBox();
+                          },
+                        );
                       },
                     ),
                   ],
@@ -150,8 +161,36 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                         },
                       ),
                     ),
-                    const Tab(text: 'الموافق عليها'),
-                    const Tab(text: 'المرفوضة'),
+                    Tab(
+                      child: StreamBuilder<QuerySnapshot>(
+                        stream: _breakService.pendingBreakRequestsStream(),
+                        builder: (context, snapshot) {
+                          final count = snapshot.data?.docs.length ?? 0;
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('استراحة'),
+                              if (count > 0) ...[
+                                const SizedBox(width: 5),
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.accentColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    '$count',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    const Tab(text: 'موافق عليها'),
+                    const Tab(text: 'مرفوضة'),
                   ],
                 ),
               ),
@@ -164,6 +203,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                   controller: _tabController,
                   children: [
                     _buildRequestsList(RequestStatus.pending),
+                    _buildBreakRequestsList(),
                     _buildRequestsList(RequestStatus.approved),
                     _buildRequestsList(RequestStatus.rejected),
                   ],
@@ -480,6 +520,311 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
     ).animate()
         .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
         .slideX(begin: 0.2, end: 0);
+  }
+
+  // ============ BREAK REQUESTS ============
+
+  Widget _buildBreakRequestsList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _breakService.pendingBreakRequestsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.coffee_outlined,
+                  size: 80,
+                  color: Colors.grey.withOpacity(0.3),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'لا توجد طلبات استراحة',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: Colors.grey,
+                      ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            data['id'] = docs[index].id;
+            return _buildBreakRequestCard(data, index);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildBreakRequestCard(Map<String, dynamic> request, int index) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final requestId = request['id'] as String;
+    final userName = request['userName'] as String? ?? 'موظف';
+    final storeName = request['storeName'] as String? ?? '';
+    final requestedDuration = request['requestedDuration'] as int? ?? 15;
+
+    // Parse requested time
+    String requestedTime = '--:--';
+    if (request['requestedAt'] != null) {
+      DateTime? requestedAt;
+      if (request['requestedAt'] is Timestamp) {
+        requestedAt = (request['requestedAt'] as Timestamp).toDate();
+      } else if (request['requestedAt'] is String) {
+        requestedAt = DateTime.tryParse(request['requestedAt'] as String);
+      }
+      if (requestedAt != null) {
+        requestedTime = '${requestedAt.hour.toString().padLeft(2, '0')}:${requestedAt.minute.toString().padLeft(2, '0')}';
+      }
+    }
+
+    return GlassContainer(
+      margin: const EdgeInsets.only(bottom: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.coffee, color: AppTheme.accentColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      userName,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    Text(
+                      'طلب استراحة • $requestedTime',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.grey,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppTheme.warningColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hourglass_empty, size: 16, color: AppTheme.warningColor),
+                    const SizedBox(width: 5),
+                    const Text(
+                      'قيد الانتظار',
+                      style: TextStyle(
+                        color: AppTheme.warningColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Store info
+          Row(
+            children: [
+              const Icon(Icons.store, size: 16, color: Colors.grey),
+              const SizedBox(width: 5),
+              Text(
+                storeName,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Duration
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.white.withOpacity(0.05) : Colors.black.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.timer, size: 18, color: AppTheme.accentColor),
+                const SizedBox(width: 8),
+                Text(
+                  'المدة المطلوبة: $requestedDuration دقيقة',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ],
+            ),
+          ),
+
+          // Action buttons
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _showRejectBreakDialog(requestId, userName),
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text('رفض'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.errorColor,
+                    side: const BorderSide(color: AppTheme.errorColor),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _approveBreakRequest(requestId, userName),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('موافقة'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.successColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ).animate()
+        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
+        .slideX(begin: 0.2, end: 0);
+  }
+
+  Future<void> _approveBreakRequest(String requestId, String userName) async {
+    final success = await _breakService.approveBreakRequest(requestId);
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تمت الموافقة على استراحة $userName'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('فشل في الموافقة على الطلب'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  void _showRejectBreakDialog(String requestId, String userName) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.cancel, color: AppTheme.errorColor),
+            ),
+            const SizedBox(width: 10),
+            const Text('رفض طلب الاستراحة'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              userName,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 15),
+            const Text('سبب الرفض:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: reasonController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'اكتب سبب الرفض...',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (reasonController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('يرجى كتابة سبب الرفض')),
+                );
+                return;
+              }
+
+              final success = await _breakService.rejectBreakRequest(
+                requestId,
+                reasonController.text.trim(),
+              );
+
+              Navigator.pop(context);
+
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('تم رفض استراحة $userName'),
+                    backgroundColor: AppTheme.errorColor,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            child: const Text('رفض'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showApproveDialog(RequestModel request) {

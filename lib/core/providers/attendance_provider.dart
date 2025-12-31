@@ -784,7 +784,7 @@ class AttendanceProvider extends ChangeNotifier {
       final snapshot = await _firestore
           .collection('attendance')
           .where('checkOut', isNull: true)
-          .where('checkIn', isGreaterThan: twoDaysAgo.toIso8601String())
+          .where('checkIn', isGreaterThan: Timestamp.fromDate(twoDaysAgo))
           .get();
 
       final allRecords = <AttendanceModel>[];
@@ -827,7 +827,7 @@ class AttendanceProvider extends ChangeNotifier {
     return _firestore
         .collection('attendance')
         .where('checkOut', isNull: true)
-        .where('checkIn', isGreaterThan: twoDaysAgo.toIso8601String())
+        .where('checkIn', isGreaterThan: Timestamp.fromDate(twoDaysAgo))
         .snapshots()
         .map((snapshot) {
           final allRecords = <AttendanceModel>[];
