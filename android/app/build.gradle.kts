@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.storemanagement.app"
-    compileSdk = 35
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -22,7 +22,7 @@ android {
     defaultConfig {
         applicationId = "com.storemanagement.app"
         minSdk = 23
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
         multiDexEnabled = true
