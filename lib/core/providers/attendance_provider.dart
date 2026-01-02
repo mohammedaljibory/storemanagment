@@ -385,6 +385,7 @@ class AttendanceProvider extends ChangeNotifier {
         isLate: isLate,
         lateMinutes: lateMinutes,
         penaltyMinutes: penaltyMinutes,
+        isCheckedOut: false, // Explicitly set for Firestore indexing
       );
 
       // 10. Check connectivity and save
@@ -572,6 +573,7 @@ class AttendanceProvider extends ChangeNotifier {
         'totalHours': totalHours,
         'isEarlyLeave': isEarlyLeave,
         'earlyLeaveMinutes': earlyLeaveMinutes,
+        'isCheckedOut': true, // Mark as checked out for Firestore indexing
       };
 
       // Check connectivity and save
@@ -605,6 +607,7 @@ class AttendanceProvider extends ChangeNotifier {
         totalHours: totalHours,
         isEarlyLeave: isEarlyLeave,
         earlyLeaveMinutes: earlyLeaveMinutes,
+        isCheckedOut: true,
       );
       
       _todayAttendance = updatedAttendance;
@@ -852,16 +855,16 @@ class AttendanceProvider extends ChangeNotifier {
   int get activeEmployeesCount => _activeAttendance.length;
 
   /// Fetch all employees who are currently checked in (for admin dashboard)
-  /// Uses efficient query with checkOut filter
+  /// Uses efficient query with isCheckedOut flag (Firestore doesn't index null fields)
   Future<void> fetchActiveAttendance() async {
     try {
       final now = DateTime.now();
       final twoDaysAgo = now.subtract(const Duration(days: 2));
 
-      // Efficient query: only fetch records without checkout from last 2 days
+      // Efficient query: use isCheckedOut flag instead of null check
       final snapshot = await _firestore
           .collection('attendance')
-          .where('checkOut', isNull: true)
+          .where('isCheckedOut', isEqualTo: false)
           .where('checkIn', isGreaterThan: Timestamp.fromDate(twoDaysAgo))
           .get();
 
@@ -897,14 +900,14 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   /// Stream of active attendance (real-time)
-  /// Uses efficient query with checkOut filter
+  /// Uses efficient query with isCheckedOut flag (Firestore doesn't index null fields)
   Stream<List<AttendanceModel>> activeAttendanceStream() {
     final now = DateTime.now();
     final twoDaysAgo = now.subtract(const Duration(days: 2));
 
     return _firestore
         .collection('attendance')
-        .where('checkOut', isNull: true)
+        .where('isCheckedOut', isEqualTo: false)
         .where('checkIn', isGreaterThan: Timestamp.fromDate(twoDaysAgo))
         .snapshots()
         .map((snapshot) {

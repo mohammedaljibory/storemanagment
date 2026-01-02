@@ -55,6 +55,9 @@ class AttendanceModel {
   final int totalBreakMinutes;
   final int breakOvertimeMinutes; // Minutes exceeded break limit
 
+  // Status field for Firestore queries (null fields are not indexed)
+  final bool isCheckedOut;
+
   AttendanceModel({
     required this.id,
     required this.userId,
@@ -81,6 +84,7 @@ class AttendanceModel {
     this.isOnBreak = false,
     this.totalBreakMinutes = 0,
     this.breakOvertimeMinutes = 0,
+    this.isCheckedOut = false,
   });
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
@@ -122,6 +126,7 @@ class AttendanceModel {
       isOnBreak: json['isOnBreak'] as bool? ?? false,
       totalBreakMinutes: json['totalBreakMinutes'] as int? ?? 0,
       breakOvertimeMinutes: json['breakOvertimeMinutes'] as int? ?? 0,
+      isCheckedOut: json['isCheckedOut'] as bool? ?? (json['checkOut'] != null),
     );
   }
 
@@ -152,6 +157,7 @@ class AttendanceModel {
       'isOnBreak': isOnBreak,
       'totalBreakMinutes': totalBreakMinutes,
       'breakOvertimeMinutes': breakOvertimeMinutes,
+      'isCheckedOut': isCheckedOut,
     };
   }
 
@@ -181,6 +187,7 @@ class AttendanceModel {
     bool? isOnBreak,
     int? totalBreakMinutes,
     int? breakOvertimeMinutes,
+    bool? isCheckedOut,
   }) {
     return AttendanceModel(
       id: id ?? this.id,
@@ -208,6 +215,7 @@ class AttendanceModel {
       isOnBreak: isOnBreak ?? this.isOnBreak,
       totalBreakMinutes: totalBreakMinutes ?? this.totalBreakMinutes,
       breakOvertimeMinutes: breakOvertimeMinutes ?? this.breakOvertimeMinutes,
+      isCheckedOut: isCheckedOut ?? this.isCheckedOut,
     );
   }
 
