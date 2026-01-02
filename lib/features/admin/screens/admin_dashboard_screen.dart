@@ -13,6 +13,7 @@ import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/services/admin_notification_listener.dart';
+import '../../../scripts/migrate_attendance_records.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -59,6 +60,134 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       await context.read<AttendanceProvider>().fetchActiveAttendance();
       await context.read<AttendanceProvider>().fetchAdminMonthlyStats();
     }
+  }
+
+  Future<void> _showMigrationDialog(BuildContext context) async {
+    // First show preview
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.sync, color: AppTheme.primaryColor),
+            SizedBox(width: 8),
+            Text('تحديث سجلات الحضور'),
+          ],
+        ),
+        content: FutureBuilder<MigrationPreview>(
+          future: MigrationService.previewMigration(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 100,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasData) {
+              return Text(
+                snapshot.data!.summary,
+                style: const TextStyle(fontFamily: 'Cairo'),
+              );
+            }
+            return const Text('خطأ في تحميل البيانات');
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _runMigration(context);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+            ),
+            child: const Text('بدء التحديث', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runMigration(BuildContext context) async {
+    int current = 0;
+    int total = 0;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          // Start migration
+          if (current == 0 && total == 0) {
+            MigrationService.migrateAttendanceRecords(
+              onProgress: (c, t) {
+                setState(() {
+                  current = c;
+                  total = t;
+                });
+              },
+            ).then((result) {
+              Navigator.pop(ctx);
+              // Show result
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: Row(
+                    children: [
+                      Icon(
+                        result.isSuccess ? Icons.check_circle : Icons.error,
+                        color: result.isSuccess ? Colors.green : Colors.red,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(result.isSuccess ? 'تم بنجاح' : 'حدث خطأ'),
+                    ],
+                  ),
+                  content: Text(
+                    result.summary,
+                    style: const TextStyle(fontFamily: 'Cairo'),
+                  ),
+                  actions: [
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _loadData(); // Refresh data
+                      },
+                      child: const Text('موافق'),
+                    ),
+                  ],
+                ),
+              );
+            });
+          }
+
+          return AlertDialog(
+            title: const Text('جاري التحديث...'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text('$current / ${total > 0 ? total : "..."}'),
+                if (total > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(
+                      value: current / total,
+                      backgroundColor: Colors.grey[300],
+                      valueColor: const AlwaysStoppedAnimation(AppTheme.primaryColor),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -174,6 +303,33 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ),
               ),
+          ],
+        ),
+        PopupMenuButton<String>(
+          icon: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.settings, color: Colors.white),
+          ),
+          onSelected: (value) {
+            if (value == 'migrate') {
+              _showMigrationDialog(context);
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'migrate',
+              child: Row(
+                children: [
+                  Icon(Icons.sync, color: AppTheme.primaryColor),
+                  SizedBox(width: 8),
+                  Text('تحديث سجلات الحضور'),
+                ],
+              ),
+            ),
           ],
         ),
         IconButton(
