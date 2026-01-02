@@ -855,20 +855,18 @@ class AttendanceProvider extends ChangeNotifier {
   int get activeEmployeesCount => _activeAttendance.length;
 
   /// Fetch all employees who are currently checked in (for admin dashboard)
-  /// Uses efficient query with isCheckedOut flag (Firestore doesn't index null fields)
+  /// Uses simple query with isCheckedOut flag only (no composite index needed)
   Future<void> fetchActiveAttendance() async {
     try {
-      final now = DateTime.now();
-      final twoDaysAgo = now.subtract(const Duration(days: 2));
-
-      // Efficient query: use isCheckedOut flag instead of null check
+      // Simple query: only check isCheckedOut flag (no composite index needed)
       final snapshot = await _firestore
           .collection('attendance')
           .where('isCheckedOut', isEqualTo: false)
-          .where('checkIn', isGreaterThan: Timestamp.fromDate(twoDaysAgo))
           .get();
 
       final allRecords = <AttendanceModel>[];
+      final now = DateTime.now();
+      final twoDaysAgo = now.subtract(const Duration(days: 2));
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -877,7 +875,10 @@ class AttendanceProvider extends ChangeNotifier {
 
         try {
           final attendance = AttendanceModel.fromJson(data);
-          allRecords.add(attendance);
+          // Filter by date in code (not in query) to avoid composite index
+          if (attendance.checkIn.isAfter(twoDaysAgo)) {
+            allRecords.add(attendance);
+          }
         } catch (e) {
           // Skip invalid records
         }
@@ -900,18 +901,16 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   /// Stream of active attendance (real-time)
-  /// Uses efficient query with isCheckedOut flag (Firestore doesn't index null fields)
+  /// Uses simple query with isCheckedOut flag only (no composite index needed)
   Stream<List<AttendanceModel>> activeAttendanceStream() {
-    final now = DateTime.now();
-    final twoDaysAgo = now.subtract(const Duration(days: 2));
-
     return _firestore
         .collection('attendance')
         .where('isCheckedOut', isEqualTo: false)
-        .where('checkIn', isGreaterThan: Timestamp.fromDate(twoDaysAgo))
         .snapshots()
         .map((snapshot) {
           final allRecords = <AttendanceModel>[];
+          final now = DateTime.now();
+          final twoDaysAgo = now.subtract(const Duration(days: 2));
 
           for (var doc in snapshot.docs) {
             final data = doc.data();
@@ -920,7 +919,10 @@ class AttendanceProvider extends ChangeNotifier {
 
             try {
               final attendance = AttendanceModel.fromJson(data);
-              allRecords.add(attendance);
+              // Filter by date in code (not in query) to avoid composite index
+              if (attendance.checkIn.isAfter(twoDaysAgo)) {
+                allRecords.add(attendance);
+              }
             } catch (e) {
               // Skip invalid records
             }
