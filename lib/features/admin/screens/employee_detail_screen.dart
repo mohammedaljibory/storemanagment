@@ -574,7 +574,8 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
             title: 'إحصائيات الحضور',
             icon: Icons.access_time,
             items: [
-              {'label': 'إجمالي أيام العمل', 'value': '${stats['totalWorkDays'] ?? 0}'},
+              {'label': 'إجمالي أيام العمل', 'value': '${stats['totalWorkDays'] ?? stats['totalDays'] ?? 0}'},
+              {'label': 'أيام الحضور في الوقت', 'value': '${stats['onTimeDays'] ?? 0}'},
               {'label': 'أيام التأخير', 'value': '${stats['lateDays'] ?? 0}'},
               {'label': 'أيام الخروج المبكر', 'value': '${stats['earlyLeaveDays'] ?? 0}'},
               {
@@ -583,8 +584,24 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
               },
               {
                 'label': 'ساعات العمل هذا الشهر',
-                'value': '${(stats['totalHoursThisMonth'] ?? 0).toStringAsFixed(1)}'
+                'value': '${(stats['totalHours'] ?? stats['totalHoursThisMonth'] ?? 0).toStringAsFixed(1)}'
               },
+              {
+                'label': 'متوسط الساعات اليومي',
+                'value': '${(stats['averageHours'] ?? 0).toStringAsFixed(1)}'
+              },
+            ],
+          ),
+          const SizedBox(height: 20),
+          _buildStatsSection(
+            context,
+            title: 'الإجازات والخصومات',
+            icon: Icons.event_busy,
+            items: [
+              {'label': 'أيام الإجازات هذا الشهر', 'value': '${stats['vacationDays'] ?? 0}'},
+              {'label': 'إجمالي دقائق التأخير', 'value': '${stats['totalLateMinutes'] ?? 0}'},
+              {'label': 'إجمالي دقائق الخروج المبكر', 'value': '${stats['totalEarlyLeaveMinutes'] ?? 0}'},
+              {'label': 'إجمالي دقائق الخصم', 'value': '${stats['totalPenaltyMinutes'] ?? 0}'},
             ],
           ),
         ],

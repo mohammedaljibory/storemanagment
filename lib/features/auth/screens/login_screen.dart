@@ -134,6 +134,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
                           style: TextStyle(
                             color: isDarkMode ? Colors.white : Colors.black87,
                           ),
@@ -165,6 +167,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: !_isPasswordVisible,
+                          textDirection: TextDirection.ltr,
+                          textAlign: TextAlign.left,
                           style: TextStyle(
                             color: isDarkMode ? Colors.white : Colors.black87,
                           ),

@@ -106,12 +106,14 @@ class EmployeeProvider extends ChangeNotifier {
         return TaskModel.fromJson(data);
       }).toList();
 
-      // Get employee attendance
+      // Get employee attendance - fetch all records for accurate stats
+      final now = DateTime.now();
+      final startOfMonth = DateTime(now.year, now.month, 1);
+
       final attendanceSnapshot = await _firestore
           .collection('attendance')
           .where('userId', isEqualTo: employeeId)
           .orderBy('checkIn', descending: true)
-          .limit(30)
           .get();
 
       _employeeAttendance = attendanceSnapshot.docs.map((doc) {
@@ -121,8 +123,29 @@ class EmployeeProvider extends ChangeNotifier {
         return AttendanceModel.fromJson(data);
       }).toList();
 
-      // Calculate stats
-      final now = DateTime.now();
+      // Get employee vacation requests for current month
+      final vacationSnapshot = await _firestore
+          .collection('requests')
+          .where('employeeId', isEqualTo: employeeId)
+          .where('status', isEqualTo: 'approved')
+          .get();
+
+      int vacationDays = 0;
+      for (var doc in vacationSnapshot.docs) {
+        final data = doc.data();
+        if (data['type'] == 'fullDayOff') {
+          final targetDate = (data['targetDate'] as Timestamp?)?.toDate();
+          if (targetDate != null &&
+              targetDate.year == now.year &&
+              targetDate.month == now.month) {
+            // Check for multi-day vacation
+            final totalDaysVacation = data['totalDays'] as int? ?? 1;
+            vacationDays += totalDaysVacation;
+          }
+        }
+      }
+
+      // Calculate stats for current month
       final thisMonthAttendance = _employeeAttendance.where((a) =>
           a.checkIn.year == now.year && a.checkIn.month == now.month).toList();
 
@@ -136,10 +159,28 @@ class EmployeeProvider extends ChangeNotifier {
         totalHours += a.totalHours ?? 0;
       }
 
+      // Calculate total penalty minutes
+      int totalPenaltyMinutes = 0;
+      int totalLateMinutes = 0;
+      int totalEarlyLeaveMinutes = 0;
+      for (var a in thisMonthAttendance) {
+        totalPenaltyMinutes += a.penaltyMinutes;
+        totalLateMinutes += a.lateMinutes;
+        totalEarlyLeaveMinutes += a.earlyLeaveMinutes;
+      }
+
       int completedTasks = _employeeTasks.where((t) => t.status == TaskStatus.completed).length;
       int pendingTasks = _employeeTasks.where((t) =>
           t.status == TaskStatus.pending || t.status == TaskStatus.inProgress).length;
       int failedTasks = _employeeTasks.where((t) => t.status == TaskStatus.failed).length;
+
+      // Calculate compliance rate (on-time percentage)
+      double complianceRate = totalDays > 0 ? (onTimeDays / totalDays * 100) : 0;
+
+      // Calculate task completion rate
+      double taskCompletionRate = _employeeTasks.isNotEmpty
+          ? (completedTasks / _employeeTasks.length * 100)
+          : 0;
 
       _employeeStats = {
         'totalDays': totalDays,
@@ -152,7 +193,14 @@ class EmployeeProvider extends ChangeNotifier {
         'pendingTasks': pendingTasks,
         'failedTasks': failedTasks,
         'totalTasks': _employeeTasks.length,
-        'attendanceRate': totalDays > 0 ? (onTimeDays / totalDays * 100).round() : 0,
+        'complianceRate': complianceRate,
+        'taskCompletionRate': taskCompletionRate,
+        'vacationDays': vacationDays,
+        'totalPenaltyMinutes': totalPenaltyMinutes,
+        'totalLateMinutes': totalLateMinutes,
+        'totalEarlyLeaveMinutes': totalEarlyLeaveMinutes,
+        'totalWorkDays': totalDays, // For backward compatibility
+        'attendanceRate': complianceRate.round(), // For backward compatibility
       };
 
       _isLoading = false;
