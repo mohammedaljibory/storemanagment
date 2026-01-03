@@ -888,14 +888,12 @@ class AttendanceProvider extends ChangeNotifier {
   int get activeEmployeesCount => _activeAttendance.length;
 
   /// Fetch all employees who are currently checked in (for admin dashboard)
-  /// Uses simple query with isCheckedOut flag only (no composite index needed)
+  /// Handles both old records (without isCheckedOut) and new records
   Future<void> fetchActiveAttendance() async {
     try {
-      // Simple query: only check isCheckedOut flag (no composite index needed)
-      final snapshot = await _firestore
-          .collection('attendance')
-          .where('isCheckedOut', isEqualTo: false)
-          .get();
+      // Fetch all attendance records and filter locally
+      // This handles both old records (no isCheckedOut field) and new records
+      final snapshot = await _firestore.collection('attendance').get();
 
       final allRecords = <AttendanceModel>[];
       final now = DateTime.now();
@@ -904,6 +902,17 @@ class AttendanceProvider extends ChangeNotifier {
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+
+        // Check if employee is still checked in (no checkout)
+        // Handle both: isCheckedOut == false OR (isCheckedOut not set AND checkOut is null)
+        final isCheckedOut = data['isCheckedOut'];
+        final hasCheckOut = data['checkOut'] != null;
+
+        // Skip if already checked out
+        if (isCheckedOut == true || hasCheckOut) {
+          continue;
+        }
+
         data['id'] = doc.id;
         _convertTimestamps(data);
 
@@ -930,16 +939,15 @@ class AttendanceProvider extends ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
-      // Silent fail
+      print('Error fetching active attendance: $e');
     }
   }
 
   /// Stream of active attendance (real-time)
-  /// Uses simple query with isCheckedOut flag only (no composite index needed)
+  /// Handles both old records (without isCheckedOut) and new records
   Stream<List<AttendanceModel>> activeAttendanceStream() {
     return _firestore
         .collection('attendance')
-        .where('isCheckedOut', isEqualTo: false)
         .snapshots()
         .map((snapshot) {
           final allRecords = <AttendanceModel>[];
@@ -949,6 +957,17 @@ class AttendanceProvider extends ChangeNotifier {
 
           for (var doc in snapshot.docs) {
             final data = doc.data();
+
+            // Check if employee is still checked in (no checkout)
+            // Handle both: isCheckedOut == false OR (isCheckedOut not set AND checkOut is null)
+            final isCheckedOut = data['isCheckedOut'];
+            final hasCheckOut = data['checkOut'] != null;
+
+            // Skip if already checked out
+            if (isCheckedOut == true || hasCheckOut) {
+              continue;
+            }
+
             data['id'] = doc.id;
             _convertTimestamps(data);
 
