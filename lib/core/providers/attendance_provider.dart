@@ -392,8 +392,8 @@ class AttendanceProvider extends ChangeNotifier {
       final hasConnection = await _hasConnectivity();
       
       if (hasConnection) {
-        // Save to Firebase
-        final docRef = await _firestore.collection('attendance').add(attendance.toJson());
+        // Save to Firebase (use toFirestore for Timestamp support)
+        final docRef = await _firestore.collection('attendance').add(attendance.toFirestore());
         await docRef.update({'id': docRef.id});
 
         final savedAttendance = attendance.copyWith(id: docRef.id);
@@ -775,61 +775,79 @@ class AttendanceProvider extends ChangeNotifier {
   Map<String, dynamic> get adminMonthlyStats => {..._adminMonthlyStats};
 
   /// Fetch monthly statistics for all employees (for admin dashboard)
+  /// Handles both Timestamp and String date formats for backward compatibility
   Future<void> fetchAdminMonthlyStats() async {
     try {
       final now = DateTime.now();
       final startOfMonth = DateTime(now.year, now.month, 1);
       final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+      final startOfToday = DateTime(now.year, now.month, now.day);
+      final endOfToday = startOfToday.add(const Duration(days: 1));
 
-      final snapshot = await _firestore
-          .collection('attendance')
-          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth))
-          .where('checkIn', isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth))
-          .get();
+      // Fetch all attendance records and filter locally (handles both Timestamp and String formats)
+      final snapshot = await _firestore.collection('attendance').get();
 
-      int totalAttendance = snapshot.docs.length;
+      int monthlyTotal = 0;
       int lateCount = 0;
       int onTimeCount = 0;
       int earlyLeaveCount = 0;
       double totalHours = 0;
       Set<String> uniqueEmployees = {};
 
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        uniqueEmployees.add(data['userId'] ?? '');
-
-        if (data['isLate'] == true) lateCount++;
-        else onTimeCount++;
-
-        if (data['isEarlyLeave'] == true) earlyLeaveCount++;
-
-        if (data['totalHours'] != null) {
-          totalHours += (data['totalHours'] as num).toDouble();
-        }
-      }
-
-      // Today's stats
-      final startOfToday = DateTime(now.year, now.month, now.day);
-      final endOfToday = startOfToday.add(const Duration(days: 1));
-
-      final todaySnapshot = await _firestore
-          .collection('attendance')
-          .where('checkIn', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfToday))
-          .where('checkIn', isLessThan: Timestamp.fromDate(endOfToday))
-          .get();
-
-      int todayTotal = todaySnapshot.docs.length;
+      int todayTotal = 0;
       int todayLate = 0;
       int todayOnTime = 0;
 
-      for (var doc in todaySnapshot.docs) {
+      for (var doc in snapshot.docs) {
         final data = doc.data();
-        if (data['isLate'] == true) todayLate++;
-        else todayOnTime++;
+
+        // Parse checkIn date (handles both Timestamp and String)
+        DateTime? checkInDate;
+        try {
+          if (data['checkIn'] is Timestamp) {
+            checkInDate = (data['checkIn'] as Timestamp).toDate();
+          } else if (data['checkIn'] is String) {
+            checkInDate = DateTime.parse(data['checkIn'] as String);
+          }
+        } catch (e) {
+          continue; // Skip records with invalid dates
+        }
+
+        if (checkInDate == null) continue;
+
+        // Check if within current month
+        if (checkInDate.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) &&
+            checkInDate.isBefore(endOfMonth.add(const Duration(seconds: 1)))) {
+          monthlyTotal++;
+          uniqueEmployees.add(data['userId'] ?? '');
+
+          if (data['isLate'] == true) {
+            lateCount++;
+          } else {
+            onTimeCount++;
+          }
+
+          if (data['isEarlyLeave'] == true) earlyLeaveCount++;
+
+          if (data['totalHours'] != null) {
+            totalHours += (data['totalHours'] as num).toDouble();
+          }
+
+          // Check if today
+          if (checkInDate.isAfter(startOfToday.subtract(const Duration(seconds: 1))) &&
+              checkInDate.isBefore(endOfToday)) {
+            todayTotal++;
+            if (data['isLate'] == true) {
+              todayLate++;
+            } else {
+              todayOnTime++;
+            }
+          }
+        }
       }
 
       _adminMonthlyStats = {
-        'monthlyTotal': totalAttendance,
+        'monthlyTotal': monthlyTotal,
         'monthlyLate': lateCount,
         'monthlyOnTime': onTimeCount,
         'monthlyEarlyLeave': earlyLeaveCount,
@@ -838,13 +856,28 @@ class AttendanceProvider extends ChangeNotifier {
         'todayTotal': todayTotal,
         'todayLate': todayLate,
         'todayOnTime': todayOnTime,
-        'latePercentage': totalAttendance > 0 ? (lateCount / totalAttendance * 100) : 0.0,
-        'onTimePercentage': totalAttendance > 0 ? (onTimeCount / totalAttendance * 100) : 0.0,
+        'latePercentage': monthlyTotal > 0 ? (lateCount / monthlyTotal * 100) : 0.0,
+        'onTimePercentage': monthlyTotal > 0 ? (onTimeCount / monthlyTotal * 100) : 0.0,
       };
 
       notifyListeners();
     } catch (e) {
       print('Error fetching admin monthly stats: $e');
+      // Set default values on error
+      _adminMonthlyStats = {
+        'monthlyTotal': 0,
+        'monthlyLate': 0,
+        'monthlyOnTime': 0,
+        'monthlyEarlyLeave': 0,
+        'monthlyTotalHours': 0.0,
+        'monthlyUniqueEmployees': 0,
+        'todayTotal': 0,
+        'todayLate': 0,
+        'todayOnTime': 0,
+        'latePercentage': 0.0,
+        'onTimePercentage': 0.0,
+      };
+      notifyListeners();
     }
   }
 
@@ -866,7 +899,8 @@ class AttendanceProvider extends ChangeNotifier {
 
       final allRecords = <AttendanceModel>[];
       final now = DateTime.now();
-      final twoDaysAgo = now.subtract(const Duration(days: 2));
+      // Only show employees who checked in within the last 16 hours (realistic work shift)
+      final maxDuration = now.subtract(const Duration(hours: 16));
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
@@ -875,8 +909,8 @@ class AttendanceProvider extends ChangeNotifier {
 
         try {
           final attendance = AttendanceModel.fromJson(data);
-          // Filter by date in code (not in query) to avoid composite index
-          if (attendance.checkIn.isAfter(twoDaysAgo)) {
+          // Filter: only show if checked in within last 16 hours
+          if (attendance.checkIn.isAfter(maxDuration)) {
             allRecords.add(attendance);
           }
         } catch (e) {
@@ -910,7 +944,8 @@ class AttendanceProvider extends ChangeNotifier {
         .map((snapshot) {
           final allRecords = <AttendanceModel>[];
           final now = DateTime.now();
-          final twoDaysAgo = now.subtract(const Duration(days: 2));
+          // Only show employees who checked in within the last 16 hours (realistic work shift)
+          final maxDuration = now.subtract(const Duration(hours: 16));
 
           for (var doc in snapshot.docs) {
             final data = doc.data();
@@ -919,8 +954,8 @@ class AttendanceProvider extends ChangeNotifier {
 
             try {
               final attendance = AttendanceModel.fromJson(data);
-              // Filter by date in code (not in query) to avoid composite index
-              if (attendance.checkIn.isAfter(twoDaysAgo)) {
+              // Filter: only show if checked in within last 16 hours
+              if (attendance.checkIn.isAfter(maxDuration)) {
                 allRecords.add(attendance);
               }
             } catch (e) {

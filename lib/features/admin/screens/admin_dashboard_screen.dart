@@ -532,7 +532,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ).animate().fadeIn(delay: 400.ms, duration: 600.ms)
         else
           SizedBox(
-            height: 95,
+            height: 105,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: activeAttendance.length,
@@ -553,11 +553,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final minutes = duration.inMinutes % 60;
 
     return GlassContainer(
-      margin: EdgeInsets.only(left: index == 0 ? 0 : 10),
-      padding: const EdgeInsets.all(10),
+      margin: EdgeInsetsDirectional.only(start: index == 0 ? 0 : 12),
+      padding: const EdgeInsets.all(12),
       child: SizedBox(
-        width: 130,
-        height: 70,
+        width: 140,
+        height: 75,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

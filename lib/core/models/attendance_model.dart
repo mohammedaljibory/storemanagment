@@ -161,6 +161,38 @@ class AttendanceModel {
     };
   }
 
+  /// Returns JSON for Firestore (uses Timestamps for better query support)
+  Map<String, dynamic> toFirestore() {
+    return {
+      'id': id,
+      'userId': userId,
+      'userName': userName,
+      'storeId': storeId,
+      'storeName': storeName,
+      'shiftId': shiftId,
+      'shiftName': shiftName,
+      'expectedStartTime': expectedStartTime,
+      'expectedEndTime': expectedEndTime,
+      'checkIn': checkIn, // Firestore will convert to Timestamp
+      'checkOut': checkOut, // Firestore will convert to Timestamp
+      'checkInLocation': checkInLocation.toJson(),
+      'checkOutLocation': checkOutLocation?.toJson(),
+      'totalHours': totalHours,
+      'isLate': isLate,
+      'lateMinutes': lateMinutes,
+      'isEarlyLeave': isEarlyLeave,
+      'earlyLeaveMinutes': earlyLeaveMinutes,
+      'notes': notes,
+      'penaltyMinutes': penaltyMinutes,
+      'breakStartTime': breakStartTime,
+      'breakEndTime': breakEndTime,
+      'isOnBreak': isOnBreak,
+      'totalBreakMinutes': totalBreakMinutes,
+      'breakOvertimeMinutes': breakOvertimeMinutes,
+      'isCheckedOut': isCheckedOut,
+    };
+  }
+
   AttendanceModel copyWith({
     String? id,
     String? userId,
