@@ -275,7 +275,8 @@ class AuthProvider extends ChangeNotifier {
           await FCMService.subscribeToStore(_user!.storeId!);
         }
       } catch (e) {
-        print('Error registering FCM token: $e');
+        // FCM registration failure is expected on iOS simulators - ignore
+        // print('Error registering FCM token: $e');
       }
     });
   }
