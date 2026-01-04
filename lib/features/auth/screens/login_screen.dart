@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_theme.dart';
@@ -97,14 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     size: 50,
                     color: AppTheme.primaryColor,
                   ),
-                ).animate()
-                    .fadeIn(duration: 800.ms)
-                    .scale(
-                      begin: const Offset(0.8, 0.8),
-                      end: const Offset(1, 1),
-                      duration: 800.ms,
-                      curve: Curves.elasticOut,
-                    ),
+                ),
                 const SizedBox(height: 20),
                 Text(
                   'مرحباً بعودتك',
@@ -112,17 +104,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
-                ).animate()
-                    .fadeIn(delay: 200.ms, duration: 600.ms)
-                    .slideY(begin: -0.2, end: 0),
+                ),
                 const SizedBox(height: 10),
                 Text(
                   'سجل دخولك للمتابعة',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Colors.white70,
                       ),
-                ).animate()
-                    .fadeIn(delay: 400.ms, duration: 600.ms),
+                ),
                 const SizedBox(height: 40),
                 GlassContainer(
                   borderRadius: 25,
@@ -247,9 +236,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                   ),
-                ).animate()
-                    .fadeIn(delay: 600.ms, duration: 800.ms)
-                    .slideY(begin: 0.3, end: 0),
+                ),
                 const SizedBox(height: 20),
 
               ],

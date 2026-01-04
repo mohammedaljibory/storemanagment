@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -22,7 +21,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);  // 5 tabs including rejected
+    _tabController = TabController(length: 5, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authProvider = context.read<AuthProvider>();
@@ -108,9 +107,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                       ),
                   ],
                 ),
-              ).animate()
-                  .fadeIn(duration: 600.ms)
-                  .slideY(begin: -0.2, end: 0),
+              ),
 
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -123,7 +120,6 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                 child: TabBar(
                   controller: _tabController,
                   indicatorSize: TabBarIndicatorSize.tab,
-                  isScrollable: true,  // Make tabs scrollable
                   indicator: BoxDecoration(
                     gradient: LinearGradient(
                       colors: isDarkMode
@@ -135,16 +131,14 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                   labelColor: Colors.white,
                   unselectedLabelColor: isDarkMode ? Colors.white60 : Colors.black54,
                   tabs: const [
-                    Tab(text: 'في الانتظار'),
-                    Tab(text: 'قيد التنفيذ'),
-                    Tab(text: 'بانتظار الموافقة'),
-                    Tab(text: 'مرفوضة'),
-                    Tab(text: 'مكتملة'),
+                    Tab(icon: Icon(Icons.pending, size: 24)),
+                    Tab(icon: Icon(Icons.work_history, size: 24)),
+                    Tab(icon: Icon(Icons.hourglass_top, size: 24)),
+                    Tab(icon: Icon(Icons.thumb_down, size: 24)),
+                    Tab(icon: Icon(Icons.check_circle, size: 24)),
                   ],
                 ),
-              ).animate()
-                  .fadeIn(delay: 200.ms, duration: 600.ms)
-                  .slideX(begin: -0.2, end: 0),
+              ),
 
               const SizedBox(height: 20),
 
@@ -201,12 +195,6 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
         icon: const Icon(Icons.add),
         label: const Text('مهمة جديدة'),
         backgroundColor: AppTheme.primaryColor,
-      ).animate()
-          .fadeIn(delay: 600.ms)
-          .scale(
-        begin: const Offset(0.8, 0.8),
-        end: const Offset(1, 1),
-        curve: Curves.elasticOut,
       )
           : null,
     );
@@ -357,9 +345,7 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
           ],
         ),
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildStatusBadge(TaskStatus status) {

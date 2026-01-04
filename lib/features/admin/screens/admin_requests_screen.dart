@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -76,7 +75,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                     const SizedBox(width: 10),
                     Text(
                       'إدارة الطلبات',
-                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
                     ),
@@ -98,11 +97,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  '$totalCount طلب جديد',
+                                  '$totalCount',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 12,
+                                    fontSize: 14,
                                   ),
                                 ),
                               );
@@ -114,9 +113,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                     ),
                   ],
                 ),
-              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+              ),
 
-              // Tab Bar
+              // Tab Bar with Icons
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 decoration: BoxDecoration(
@@ -138,24 +137,26 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                       child: Consumer<RequestProvider>(
                         builder: (context, provider, _) {
                           final count = provider.pendingCount;
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
+                          return Stack(
+                            clipBehavior: Clip.none,
                             children: [
-                              const Text('قيد الانتظار'),
-                              if (count > 0) ...[
-                                const SizedBox(width: 5),
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: AppTheme.warningColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text(
-                                    '$count',
-                                    style: const TextStyle(fontSize: 10),
+                              const Icon(Icons.hourglass_empty, size: 24),
+                              if (count > 0)
+                                Positioned(
+                                  right: -8,
+                                  top: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.warningColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      '$count',
+                                      style: const TextStyle(fontSize: 10, color: Colors.white),
+                                    ),
                                   ),
                                 ),
-                              ],
                             ],
                           );
                         },
@@ -166,31 +167,33 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                         stream: _breakService.pendingBreakRequestsStream(),
                         builder: (context, snapshot) {
                           final count = snapshot.data?.docs.length ?? 0;
-                          return Row(
-                            mainAxisSize: MainAxisSize.min,
+                          return Stack(
+                            clipBehavior: Clip.none,
                             children: [
-                              const Text('استراحة'),
-                              if (count > 0) ...[
-                                const SizedBox(width: 5),
-                                Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: AppTheme.accentColor,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Text(
-                                    '$count',
-                                    style: const TextStyle(fontSize: 10),
+                              const Icon(Icons.coffee, size: 24),
+                              if (count > 0)
+                                Positioned(
+                                  right: -8,
+                                  top: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: AppTheme.accentColor,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      '$count',
+                                      style: const TextStyle(fontSize: 10, color: Colors.white),
+                                    ),
                                   ),
                                 ),
-                              ],
                             ],
                           );
                         },
                       ),
                     ),
-                    const Tab(text: 'موافق عليها'),
-                    const Tab(text: 'مرفوضة'),
+                    const Tab(icon: Icon(Icons.check_circle, size: 24)),
+                    const Tab(icon: Icon(Icons.cancel, size: 24)),
                   ],
                 ),
               ),
@@ -347,26 +350,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(statusIcon, size: 16, color: statusColor),
-                    const SizedBox(width: 5),
-                    Text(
-                      request.statusText,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Icon(statusIcon, size: 18, color: statusColor),
               ),
             ],
           ),
@@ -375,7 +364,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
           // Store info
           Row(
             children: [
-              Icon(Icons.store, size: 16, color: Colors.grey),
+              const Icon(Icons.store, size: 16, color: Colors.grey),
               const SizedBox(width: 5),
               Text(
                 request.storeName,
@@ -391,7 +380,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
           if (request.type == RequestType.timeOff && request.startTime != null) ...[
             Row(
               children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey),
+                const Icon(Icons.access_time, size: 16, color: Colors.grey),
                 const SizedBox(width: 5),
                 Text(
                   request.timeRangeText,
@@ -517,9 +506,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
           ],
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   // ============ BREAK REQUESTS ============
@@ -627,26 +614,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppTheme.warningColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.hourglass_empty, size: 16, color: AppTheme.warningColor),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'قيد الانتظار',
-                      style: TextStyle(
-                        color: AppTheme.warningColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+                child: const Icon(Icons.hourglass_empty, size: 18, color: AppTheme.warningColor),
               ),
             ],
           ),
@@ -719,9 +692,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Future<void> _approveBreakRequest(String requestId, String userName) async {
@@ -830,11 +801,11 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
   void _showApproveDialog(RequestModel request) {
     final authProvider = context.read<AuthProvider>();
     final responseController = TextEditingController();
-    
+
     // For time-off, allow admin to modify duration
     TimeOfDay? modifiedStartTime;
     TimeOfDay? modifiedEndTime;
-    
+
     if (request.type == RequestType.timeOff && request.startTime != null) {
       final startParts = request.startTime!.split(':');
       final endParts = request.endTime!.split(':');
@@ -991,7 +962,7 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                   if (modifiedStartTime != null && modifiedEndTime != null) {
                     startTimeStr = '${modifiedStartTime!.hour.toString().padLeft(2, '0')}:${modifiedStartTime!.minute.toString().padLeft(2, '0')}';
                     endTimeStr = '${modifiedEndTime!.hour.toString().padLeft(2, '0')}:${modifiedEndTime!.minute.toString().padLeft(2, '0')}';
-                    
+
                     final startMinutes = modifiedStartTime!.hour * 60 + modifiedStartTime!.minute;
                     final endMinutes = modifiedEndTime!.hour * 60 + modifiedEndTime!.minute;
                     durationMinutes = endMinutes - startMinutes;
