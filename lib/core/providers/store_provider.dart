@@ -180,6 +180,53 @@ class StoreProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fetch multiple stores by IDs
+  Future<List<StoreModel>> fetchStoresByIds(List<String> storeIds) async {
+    try {
+      if (storeIds.isEmpty) return [];
+
+      final List<StoreModel> result = [];
+
+      // Check cache first
+      for (final id in storeIds) {
+        final cached = getStoreById(id);
+        if (cached != null) {
+          result.add(cached);
+        }
+      }
+
+      // Fetch missing stores
+      final missingIds = storeIds.where(
+        (id) => !result.any((s) => s.id == id)
+      ).toList();
+
+      if (missingIds.isNotEmpty) {
+        for (final id in missingIds) {
+          final store = await fetchStoreById(id);
+          if (store != null) {
+            result.add(store);
+          }
+        }
+      }
+
+      return result;
+    } catch (e) {
+      print('Error fetching stores by IDs: $e');
+      return [];
+    }
+  }
+
+  /// Find stores within radius of given coordinates
+  List<StoreModel> findStoresWithinRadius(double lat, double lng, {List<String>? filterStoreIds}) {
+    var stores = _stores.where((s) => s.isActive).toList();
+
+    if (filterStoreIds != null) {
+      stores = stores.where((s) => filterStoreIds.contains(s.id)).toList();
+    }
+
+    return stores.where((s) => s.isWithinRadius(lat, lng)).toList();
+  }
+
   /// Listen to stores in real-time
   Stream<List<StoreModel>> storesStream(String adminId) {
     return _firestore

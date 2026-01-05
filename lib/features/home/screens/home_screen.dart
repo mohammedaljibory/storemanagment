@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/theme_provider.dart';
@@ -685,49 +686,14 @@ class _DashboardTabState extends State<DashboardTab> {
                   _showSuccessSnackbar(context, 'تم تسجيل الخروج بنجاح');
                 }
               } else {
-                // Check In with validation
-                // Use effective shift (considers temporary shift)
-                final effectiveShiftId = user.effectiveShiftId ?? user.shiftId;
-                
-                var store = storeProvider.getStoreById(user.storeId ?? '');
-                var shift = shiftProvider.getShiftById(effectiveShiftId ?? '');
-
-                // If not loaded, fetch from Firebase
-                if (store == null && user.storeId != null) {
-                  store = await storeProvider.fetchStoreById(user.storeId!);
-                }
-
-                if (shift == null && effectiveShiftId != null) {
-                  shift = await shiftProvider.fetchShiftById(effectiveShiftId);
-                }
-
-                if (store == null) {
-                  _showErrorDialog(context, 'لم يتم تحديد متجر لك. تواصل مع المدير.');
-                  return;
-                }
-
-                if (shift == null) {
-                  _showErrorDialog(context, 'لم يتم تحديد شفت لك. تواصل مع المدير.');
-                  return;
-                }
-
-                final success = await attendanceProvider.checkIn(
-                  userId: user.id,
-                  userName: user.name,
-                  store: store,
-                  shift: shift,
+                // Check In with validation and multi-store support
+                await _handleCheckIn(
+                  context,
+                  user,
+                  attendanceProvider,
+                  storeProvider,
+                  shiftProvider,
                 );
-
-                if (!success && context.mounted) {
-                  _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
-                } else if (success && context.mounted) {
-                  final checkInResult = shift.canCheckIn();
-                  if (checkInResult['isLate'] == true) {
-                    _showLateWarning(context, checkInResult['lateMinutes'] ?? 0);
-                  } else {
-                    _showSuccessSnackbar(context, 'تم تسجيل الحضور بنجاح');
-                  }
-                }
               }
             },
       height: 120,
@@ -1178,6 +1144,332 @@ class _DashboardTabState extends State<DashboardTab> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  /// Handle check-in with multi-store support
+  Future<void> _handleCheckIn(
+    BuildContext context,
+    dynamic user,
+    AttendanceProvider attendanceProvider,
+    StoreProvider storeProvider,
+    ShiftProvider shiftProvider,
+  ) async {
+    // Use effective shift (considers temporary shift)
+    final effectiveShiftId = user.effectiveShiftId ?? user.shiftId;
+
+    // Get shift first
+    var shift = shiftProvider.getShiftById(effectiveShiftId ?? '');
+    if (shift == null && effectiveShiftId != null) {
+      shift = await shiftProvider.fetchShiftById(effectiveShiftId);
+    }
+
+    if (shift == null) {
+      _showErrorDialog(context, 'لم يتم تحديد شفت لك. تواصل مع المدير.');
+      return;
+    }
+
+    // Get primary store
+    var primaryStore = storeProvider.getStoreById(user.storeId ?? '');
+    if (primaryStore == null && user.storeId != null) {
+      primaryStore = await storeProvider.fetchStoreById(user.storeId!);
+    }
+
+    if (primaryStore == null) {
+      _showErrorDialog(context, 'لم يتم تحديد متجر لك. تواصل مع المدير.');
+      return;
+    }
+
+    // Fetch all authorized stores
+    final authorizedStoreIds = user.allAuthorizedStoreIds as List<String>;
+    final allStores = await storeProvider.fetchStoresByIds(authorizedStoreIds);
+
+    // Try to get current location to determine which store to use
+    try {
+      final position = await _getCurrentLocation();
+
+      // Find all stores within range
+      final storesInRange = <StoreModel>[];
+      for (final store in allStores) {
+        if (store.isWithinRadius(position.latitude, position.longitude)) {
+          storesInRange.add(store);
+        }
+      }
+
+      if (storesInRange.isEmpty) {
+        // No store in range
+        final distances = allStores.map((s) =>
+          '${s.name}: ${s.getDistanceFrom(position.latitude, position.longitude).toStringAsFixed(0)} متر'
+        ).join('\n');
+
+        _showErrorDialog(
+          context,
+          'يجب أن تكون داخل نطاق أحد المتاجر\n\n'
+          'المسافة الحالية:\n$distances',
+        );
+        return;
+      }
+
+      if (storesInRange.length == 1) {
+        // Only one store in range
+        final store = storesInRange.first;
+
+        // If it's the primary store, proceed directly
+        if (store.id == user.storeId) {
+          await _performCheckIn(context, user, store, shift, attendanceProvider);
+        } else {
+          // Ask confirmation for secondary store
+          final confirmed = await _showStoreConfirmationDialog(context, store);
+          if (confirmed == true && context.mounted) {
+            await _performCheckIn(context, user, store, shift, attendanceProvider);
+          }
+        }
+      } else {
+        // Multiple stores in range - let user choose
+        final selectedStore = await _showStoreSelectionDialog(context, storesInRange, user.storeId);
+        if (selectedStore != null && context.mounted) {
+          await _performCheckIn(context, user, selectedStore, shift, attendanceProvider);
+        }
+      }
+    } catch (e) {
+      _showErrorDialog(context, 'فشل في الحصول على الموقع: $e');
+    }
+  }
+
+  /// Perform the actual check-in
+  Future<void> _performCheckIn(
+    BuildContext context,
+    dynamic user,
+    StoreModel store,
+    dynamic shift,
+    AttendanceProvider attendanceProvider,
+  ) async {
+    final success = await attendanceProvider.checkIn(
+      userId: user.id,
+      userName: user.name,
+      store: store,
+      shift: shift,
+    );
+
+    if (!success && context.mounted) {
+      _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
+    } else if (success && context.mounted) {
+      final checkInResult = shift.canCheckIn();
+      if (checkInResult['isLate'] == true) {
+        _showLateWarning(context, checkInResult['lateMinutes'] ?? 0);
+      } else {
+        _showSuccessSnackbar(context, 'تم تسجيل الحضور بنجاح في ${store.name}');
+      }
+    }
+  }
+
+  /// Get current GPS location
+  Future<dynamic> _getCurrentLocation() async {
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      final requested = await Geolocator.requestPermission();
+      if (requested == LocationPermission.denied) {
+        throw Exception('تم رفض إذن الموقع');
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception('إذن الموقع مرفوض بشكل دائم');
+    }
+
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      throw Exception('خدمة الموقع غير مفعلة');
+    }
+
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+  }
+
+  /// Show confirmation dialog when checking in at authorized (non-primary) store
+  Future<bool?> _showStoreConfirmationDialog(BuildContext context, StoreModel store) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.secondaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.storefront, color: AppTheme.secondaryColor),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('تسجيل في متجر آخر')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('أنت على وشك تسجيل الحضور في:'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.store, color: AppTheme.primaryColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          store.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          store.address,
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'هل تريد المتابعة؟',
+              style: TextStyle(color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor),
+            child: const Text('تسجيل الحضور'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Show dialog to select from multiple stores in range
+  Future<StoreModel?> _showStoreSelectionDialog(
+    BuildContext context,
+    List<StoreModel> stores,
+    String? primaryStoreId,
+  ) {
+    return showDialog<StoreModel>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.store, color: AppTheme.primaryColor),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('اختر المتجر')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'أنت في نطاق عدة متاجر. اختر المتجر الذي تريد تسجيل الحضور فيه:',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            ...stores.map((store) {
+              final isPrimary = store.id == primaryStoreId;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: InkWell(
+                  onTap: () => Navigator.pop(context, store),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isPrimary
+                          ? AppTheme.primaryColor.withOpacity(0.1)
+                          : AppTheme.secondaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: isPrimary
+                          ? Border.all(color: AppTheme.primaryColor, width: 2)
+                          : null,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isPrimary ? Icons.store : Icons.storefront,
+                          color: isPrimary ? AppTheme.primaryColor : AppTheme.secondaryColor,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    store.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  if (isPrimary) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.primaryColor,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'الأساسي',
+                                        style: TextStyle(fontSize: 10, color: Colors.white),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              Text(
+                                store.address,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: Colors.grey),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('إلغاء'),
+          ),
+        ],
       ),
     );
   }

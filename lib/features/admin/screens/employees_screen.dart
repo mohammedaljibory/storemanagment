@@ -205,6 +205,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
   Widget _buildEmployeeCard(BuildContext context, UserModel employee, int index) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final storeProvider = context.read<StoreProvider>();
 
     return GlassContainer(
       margin: const EdgeInsets.only(bottom: 15),
@@ -212,6 +213,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         onTap: () {
           Navigator.pushNamed(context, AppRoutes.employeeDetail, arguments: employee.id);
         },
+        onLongPress: () => _showEmployeeOptionsMenu(context, employee),
         borderRadius: BorderRadius.circular(20),
         child: Row(
           children: [
@@ -253,6 +255,16 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.secondaryColor)),
                       ],
                     ),
+                  // Show authorized stores count
+                  if (employee.authorizedStoreIds.isNotEmpty)
+                    Row(
+                      children: [
+                        const Icon(Icons.storefront, size: 14, color: AppTheme.secondaryColor),
+                        const SizedBox(width: 4),
+                        Text('${employee.authorizedStoreIds.length} متجر إضافي',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.secondaryColor)),
+                      ],
+                    ),
                   // Show days off
                   if (employee.daysOffPerMonth > 0)
                     Row(
@@ -276,13 +288,251 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios, size: 18, color: isDarkMode ? Colors.white30 : Colors.black26),
+            PopupMenuButton<String>(
+              icon: Icon(Icons.more_vert, size: 20, color: isDarkMode ? Colors.white54 : Colors.black38),
+              onSelected: (value) {
+                if (value == 'authorized_stores') {
+                  _showAuthorizedStoresDialog(context, employee, storeProvider);
+                } else if (value == 'details') {
+                  Navigator.pushNamed(context, AppRoutes.employeeDetail, arguments: employee.id);
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'details',
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 20),
+                      SizedBox(width: 8),
+                      Text('التفاصيل'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'authorized_stores',
+                  child: Row(
+                    children: [
+                      Icon(Icons.storefront, size: 20, color: AppTheme.secondaryColor),
+                      SizedBox(width: 8),
+                      Text('المتاجر المصرح بها'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     ).animate()
         .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
         .slideX(begin: 0.2, end: 0);
+  }
+
+  void _showEmployeeOptionsMenu(BuildContext context, UserModel employee) {
+    final storeProvider = context.read<StoreProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              employee.name,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('التفاصيل'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, AppRoutes.employeeDetail, arguments: employee.id);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.storefront, color: AppTheme.secondaryColor),
+              title: const Text('إدارة المتاجر المصرح بها'),
+              subtitle: Text(
+                employee.authorizedStoreIds.isEmpty
+                    ? 'لم يتم تحديد متاجر إضافية'
+                    : '${employee.authorizedStoreIds.length} متجر إضافي',
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _showAuthorizedStoresDialog(context, employee, storeProvider);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAuthorizedStoresDialog(BuildContext context, UserModel employee, StoreProvider storeProvider) {
+    final employeeProvider = context.read<EmployeeProvider>();
+    List<String> selectedStoreIds = [...employee.authorizedStoreIds];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final allStores = storeProvider.activeStores;
+          // Filter out the primary store
+          final availableStores = allStores.where((s) => s.id != employee.storeId).toList();
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.storefront, color: AppTheme.secondaryColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('المتاجر المصرح بها'),
+                      Text(
+                        employee.name,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.normal, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Primary store info
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.store, color: AppTheme.primaryColor, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'المتجر الأساسي',
+                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                              Text(
+                                employee.storeName ?? 'غير محدد',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'اختر المتاجر الإضافية المصرح بها:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  if (availableStores.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text(
+                        'لا توجد متاجر أخرى متاحة',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 300),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: availableStores.length,
+                        itemBuilder: (context, index) {
+                          final store = availableStores[index];
+                          final isSelected = selectedStoreIds.contains(store.id);
+
+                          return CheckboxListTile(
+                            value: isSelected,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                if (value == true) {
+                                  selectedStoreIds.add(store.id);
+                                } else {
+                                  selectedStoreIds.remove(store.id);
+                                }
+                              });
+                            },
+                            title: Text(store.name),
+                            subtitle: Text(store.address, style: const TextStyle(fontSize: 12)),
+                            secondary: const Icon(Icons.store_outlined),
+                            activeColor: AppTheme.secondaryColor,
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // Show loading
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+
+                  final success = await employeeProvider.updateAuthorizedStores(
+                    employeeId: employee.id,
+                    authorizedStoreIds: selectedStoreIds,
+                  );
+
+                  // Close loading
+                  Navigator.pop(context);
+                  // Close dialog
+                  Navigator.pop(context);
+
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تحديث المتاجر المصرح بها'),
+                        backgroundColor: AppTheme.successColor,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(employeeProvider.errorMessage ?? 'فشل في التحديث'),
+                        backgroundColor: AppTheme.errorColor,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.secondaryColor),
+                child: const Text('حفظ'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   void _showAddEmployeeDialog(BuildContext context) {

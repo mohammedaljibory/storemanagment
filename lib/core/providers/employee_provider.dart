@@ -432,6 +432,75 @@ class EmployeeProvider extends ChangeNotifier {
     }
   }
 
+  // ============ AUTHORIZED STORES MANAGEMENT ============
+
+  /// Update authorized stores for an employee
+  Future<bool> updateAuthorizedStores({
+    required String employeeId,
+    required List<String> authorizedStoreIds,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Update in Firestore
+      await _firestore.collection('users').doc(employeeId).update({
+        'authorizedStoreIds': authorizedStoreIds,
+      });
+
+      // Update local list
+      final index = _employees.indexWhere((e) => e.id == employeeId);
+      if (index != -1) {
+        _employees[index] = _employees[index].copyWith(
+          authorizedStoreIds: authorizedStoreIds,
+        );
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'فشل في تحديث المتاجر المصرح بها: $e';
+      notifyListeners();
+      print('Error updating authorized stores: $e');
+      return false;
+    }
+  }
+
+  /// Add store to employee's authorized list
+  Future<bool> addAuthorizedStore({
+    required String employeeId,
+    required String storeId,
+  }) async {
+    final employee = getEmployeeById(employeeId);
+    if (employee == null) return false;
+
+    final newList = [...employee.authorizedStoreIds];
+    if (!newList.contains(storeId)) {
+      newList.add(storeId);
+    }
+    return updateAuthorizedStores(
+      employeeId: employeeId,
+      authorizedStoreIds: newList,
+    );
+  }
+
+  /// Remove store from employee's authorized list
+  Future<bool> removeAuthorizedStore({
+    required String employeeId,
+    required String storeId,
+  }) async {
+    final employee = getEmployeeById(employeeId);
+    if (employee == null) return false;
+
+    final newList = employee.authorizedStoreIds.where((id) => id != storeId).toList();
+    return updateAuthorizedStores(
+      employeeId: employeeId,
+      authorizedStoreIds: newList,
+    );
+  }
+
   // ============ OTHER METHODS ============
 
   /// Deactivate employee (soft delete) in Firebase

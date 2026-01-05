@@ -31,6 +31,10 @@ class UserModel {
   // FCM Push Notification tokens (supports multiple devices)
   final List<String> fcmTokens;
 
+  // Multi-store support: list of store IDs employee is authorized to work in
+  // (in addition to their primary store)
+  final List<String> authorizedStoreIds;
+
   UserModel({
     required this.id,
     required this.name,
@@ -53,6 +57,7 @@ class UserModel {
     this.temporaryShiftDate,
     this.temporaryShiftExpiry,
     this.fcmTokens = const [],
+    this.authorizedStoreIds = const [],
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -78,6 +83,7 @@ class UserModel {
       temporaryShiftDate: _parseDateTimeNullable(json['temporaryShiftDate']),
       temporaryShiftExpiry: _parseDateTimeNullable(json['temporaryShiftExpiry']),
       fcmTokens: _parseStringList(json['fcmTokens']),
+      authorizedStoreIds: _parseStringList(json['authorizedStoreIds']),
     );
   }
 
@@ -169,6 +175,7 @@ class UserModel {
       'temporaryShiftDate': temporaryShiftDate?.toIso8601String(),
       'temporaryShiftExpiry': temporaryShiftExpiry?.toIso8601String(),
       'fcmTokens': fcmTokens,
+      'authorizedStoreIds': authorizedStoreIds,
     };
   }
 
@@ -194,6 +201,7 @@ class UserModel {
     DateTime? temporaryShiftDate,
     DateTime? temporaryShiftExpiry,
     List<String>? fcmTokens,
+    List<String>? authorizedStoreIds,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -217,6 +225,7 @@ class UserModel {
       temporaryShiftDate: temporaryShiftDate ?? this.temporaryShiftDate,
       temporaryShiftExpiry: temporaryShiftExpiry ?? this.temporaryShiftExpiry,
       fcmTokens: fcmTokens ?? this.fcmTokens,
+      authorizedStoreIds: authorizedStoreIds ?? this.authorizedStoreIds,
     );
   }
 
@@ -244,7 +253,24 @@ class UserModel {
       temporaryShiftDate: null,
       temporaryShiftExpiry: null,
       fcmTokens: fcmTokens,
+      authorizedStoreIds: authorizedStoreIds,
     );
+  }
+
+  /// Check if employee is authorized to work at a specific store
+  bool isAuthorizedForStore(String storeId) {
+    // Primary store is always authorized
+    if (this.storeId == storeId) return true;
+    // Check authorized stores list
+    return authorizedStoreIds.contains(storeId);
+  }
+
+  /// Get all store IDs the employee can work at (primary + authorized)
+  List<String> get allAuthorizedStoreIds {
+    final stores = <String>[];
+    if (storeId != null) stores.add(storeId!);
+    stores.addAll(authorizedStoreIds.where((id) => id != storeId));
+    return stores;
   }
 
   // ============ VACATION HELPERS ============
