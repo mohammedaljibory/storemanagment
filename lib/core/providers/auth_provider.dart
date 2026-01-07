@@ -152,12 +152,13 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String phone,
     required String password,
-    required String storeId,
-    required String storeName,
-    required String shiftId,
-    required String shiftName,
+    String? storeId,
+    String? storeName,
+    String? shiftId,
+    String? shiftName,
     int daysOffPerMonth = 0,
     int allowedVacationDays = 0,
+    EmployeeType employeeType = EmployeeType.regular,
   }) async {
     try {
       _isLoading = true;
@@ -177,6 +178,7 @@ class AuthProvider extends ChangeNotifier {
           email: email,
           phone: phone,
           role: UserRole.employee,
+          employeeType: employeeType,
           storeId: storeId,
           storeName: storeName,
           shiftId: shiftId,

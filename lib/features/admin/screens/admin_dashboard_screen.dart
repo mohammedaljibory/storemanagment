@@ -472,11 +472,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final requestProvider = context.watch<RequestProvider>();
     final vacationEmployees = requestProvider.getEmployeesOnVacationToday();
 
-    // Don't show section if no one is on vacation
-    if (vacationEmployees.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -503,7 +498,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade700,
+                  color: vacationEmployees.isEmpty ? Colors.grey : Colors.blue.shade700,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -518,17 +513,47 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         const SizedBox(height: 15),
-        SizedBox(
-          height: 90,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: vacationEmployees.length,
-            itemBuilder: (context, index) {
-              final vacation = vacationEmployees[index];
-              return _buildVacationEmployeeCard(context, vacation, index);
-            },
+        if (vacationEmployees.isEmpty)
+          GlassContainer(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.work_outline,
+                    size: 40,
+                    color: Colors.grey.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'لا يوجد موظفون في إجازة اليوم',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'جميع الموظفين متاحون للعمل',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 90,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: vacationEmployees.length,
+              itemBuilder: (context, index) {
+                final vacation = vacationEmployees[index];
+                return _buildVacationEmployeeCard(context, vacation, index);
+              },
+            ),
           ),
-        ),
       ],
     );
   }

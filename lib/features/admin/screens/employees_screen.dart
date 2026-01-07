@@ -231,10 +231,44 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(employee.name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(employee.name,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      ),
+                      // Free employee badge
+                      if (employee.isFreeEmployee)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.secondaryColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.gps_fixed, size: 12, color: AppTheme.secondaryColor),
+                              const SizedBox(width: 4),
+                              Text('حر',
+                                style: TextStyle(fontSize: 10, color: AppTheme.secondaryColor, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
-                  if (employee.storeName != null)
+                  // For free employees, show "no store" message
+                  if (employee.isFreeEmployee)
+                    Row(
+                      children: [
+                        const Icon(Icons.gps_fixed, size: 14, color: AppTheme.secondaryColor),
+                        const SizedBox(width: 4),
+                        Text('موظف حر - تتبع GPS',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.secondaryColor)),
+                      ],
+                    )
+                  else if (employee.storeName != null)
                     Row(
                       children: [
                         const Icon(Icons.store, size: 14, color: Colors.grey),
@@ -246,7 +280,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                         ),
                       ],
                     ),
-                  if (employee.shiftName != null)
+                  if (!employee.isFreeEmployee && employee.shiftName != null)
                     Row(
                       children: [
                         const Icon(Icons.schedule, size: 14, color: Colors.grey),
@@ -544,6 +578,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final vacationDaysController = TextEditingController(text: '0');
     StoreModel? selectedStore;
     ShiftModel? selectedShift;
+    bool isFreeEmployee = false;
 
     showDialog(
       context: context,
@@ -593,6 +628,65 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Free Employee Toggle
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isFreeEmployee
+                          ? AppTheme.secondaryColor.withOpacity(0.1)
+                          : Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isFreeEmployee
+                            ? AppTheme.secondaryColor
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.gps_fixed,
+                          color: isFreeEmployee ? AppTheme.secondaryColor : Colors.grey,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'موظف حر',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isFreeEmployee ? AppTheme.secondaryColor : Colors.grey.shade700,
+                                ),
+                              ),
+                              Text(
+                                'بدون متجر أو وردية - تتبع GPS كامل',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: isFreeEmployee,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isFreeEmployee = value;
+                              if (value) {
+                                selectedStore = null;
+                                selectedShift = null;
+                              }
+                            });
+                          },
+                          activeColor: AppTheme.secondaryColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: daysOffController,
                     keyboardType: TextInputType.number,
@@ -613,38 +707,41 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       helperText: 'عدد أيام الإجازة المسموحة سنوياً',
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<StoreModel>(
-                    value: selectedStore,
-                    decoration: const InputDecoration(
-                      labelText: 'المتجر',
-                      prefixIcon: Icon(Icons.store),
-                    ),
-                    items: storeProvider.activeStores.map((store) {
-                      return DropdownMenuItem(value: store, child: Text(store.name));
-                    }).toList(),
-                    onChanged: (value) {
-                      setDialogState(() {
-                        selectedStore = value;
-                        selectedShift = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (selectedStore != null)
-                    DropdownButtonFormField<ShiftModel>(
-                      value: selectedShift,
+                  // Show store/shift selection only for regular employees
+                  if (!isFreeEmployee) ...[
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<StoreModel>(
+                      value: selectedStore,
                       decoration: const InputDecoration(
-                        labelText: 'الوردية',
-                        prefixIcon: Icon(Icons.schedule),
+                        labelText: 'المتجر',
+                        prefixIcon: Icon(Icons.store),
                       ),
-                      items: shiftProvider.getShiftsByStore(selectedStore!.id).map((shift) {
-                        return DropdownMenuItem(value: shift, child: Text(shift.name));
+                      items: storeProvider.activeStores.map((store) {
+                        return DropdownMenuItem(value: store, child: Text(store.name));
                       }).toList(),
                       onChanged: (value) {
-                        setDialogState(() { selectedShift = value; });
+                        setDialogState(() {
+                          selectedStore = value;
+                          selectedShift = null;
+                        });
                       },
                     ),
+                    const SizedBox(height: 16),
+                    if (selectedStore != null)
+                      DropdownButtonFormField<ShiftModel>(
+                        value: selectedShift,
+                        decoration: const InputDecoration(
+                          labelText: 'الوردية',
+                          prefixIcon: Icon(Icons.schedule),
+                        ),
+                        items: shiftProvider.getShiftsByStore(selectedStore!.id).map((shift) {
+                          return DropdownMenuItem(value: shift, child: Text(shift.name));
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() { selectedShift = value; });
+                        },
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -655,12 +752,21 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (nameController.text.isNotEmpty &&
-                      emailController.text.isNotEmpty &&
-                      passwordController.text.isNotEmpty &&
-                      selectedStore != null &&
-                      selectedShift != null) {
-                    
+                  // Validation
+                  final bool isValid;
+                  if (isFreeEmployee) {
+                    isValid = nameController.text.isNotEmpty &&
+                        emailController.text.isNotEmpty &&
+                        passwordController.text.isNotEmpty;
+                  } else {
+                    isValid = nameController.text.isNotEmpty &&
+                        emailController.text.isNotEmpty &&
+                        passwordController.text.isNotEmpty &&
+                        selectedStore != null &&
+                        selectedShift != null;
+                  }
+
+                  if (isValid) {
                     // Show loading
                     showDialog(
                       context: context,
@@ -675,12 +781,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       email: emailController.text,
                       phone: phoneController.text.isNotEmpty ? phoneController.text : '',
                       password: passwordController.text,
-                      storeId: selectedStore!.id,
-                      storeName: selectedStore!.name,
-                      shiftId: selectedShift!.id,
-                      shiftName: selectedShift!.name,
+                      storeId: isFreeEmployee ? null : selectedStore!.id,
+                      storeName: isFreeEmployee ? null : selectedStore!.name,
+                      shiftId: isFreeEmployee ? null : selectedShift!.id,
+                      shiftName: isFreeEmployee ? null : selectedShift!.name,
                       daysOffPerMonth: int.tryParse(daysOffController.text) ?? 0,
                       allowedVacationDays: int.tryParse(vacationDaysController.text) ?? 0,
+                      employeeType: isFreeEmployee ? EmployeeType.free : EmployeeType.regular,
                     );
 
                     // Close loading
@@ -690,10 +797,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       // Refresh employee list
                       await context.read<EmployeeProvider>().fetchEmployees();
                       Navigator.pop(context);
-                      
+
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('تم إضافة الموظف بنجاح'),
+                        SnackBar(
+                          content: Text(isFreeEmployee
+                              ? 'تم إضافة الموظف الحر بنجاح'
+                              : 'تم إضافة الموظف بنجاح'),
                           backgroundColor: AppTheme.successColor,
                         ),
                       );
@@ -705,6 +814,13 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                         ),
                       );
                     }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('يرجى ملء جميع الحقول المطلوبة'),
+                        backgroundColor: AppTheme.warningColor,
+                      ),
+                    );
                   }
                 },
                 child: const Text('إضافة'),
