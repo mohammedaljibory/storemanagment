@@ -13,6 +13,7 @@ import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/services/admin_notification_listener.dart';
+import '../../../core/services/fcm_service.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({Key? key}) : super(key: key);
@@ -188,7 +189,143 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: const Icon(Icons.person, color: Colors.white),
           ),
         ),
+        // Debug notifications button
+        IconButton(
+          onPressed: () => _showFCMDebugDialog(context),
+          icon: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.bug_report, color: Colors.orange),
+          ),
+        ),
       ],
+    );
+  }
+
+  void _showFCMDebugDialog(BuildContext context) async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Get FCM status
+    final status = await FCMService.debugFCMStatus();
+
+    // Close loading
+    Navigator.pop(context);
+
+    // Show results
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.notifications_active, color: Colors.orange),
+            SizedBox(width: 10),
+            Text('حالة الإشعارات'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildStatusRow('النظام', status['platform'] ?? 'N/A', Icons.phone_android),
+              _buildStatusRow(
+                'صلاحية الإشعارات',
+                status['permissionGranted'] == true ? 'مفعّل' : 'غير مفعّل',
+                status['permissionGranted'] == true ? Icons.check_circle : Icons.cancel,
+                status['permissionGranted'] == true ? Colors.green : Colors.red,
+              ),
+              _buildStatusRow(
+                'FCM Token',
+                status['fcmTokenAvailable'] == true ? 'متوفر' : 'غير متوفر',
+                status['fcmTokenAvailable'] == true ? Icons.check_circle : Icons.cancel,
+                status['fcmTokenAvailable'] == true ? Colors.green : Colors.red,
+              ),
+              if (status['fcmToken'] != null)
+                _buildStatusRow('Token', status['fcmToken'], Icons.key),
+              if (status['fcmError'] != null)
+                _buildStatusRow('خطأ FCM', status['fcmError'], Icons.error, Colors.red),
+              if (status['platform'] == 'ios') ...[
+                _buildStatusRow(
+                  'APNS',
+                  status['apnsConfigured'] == true ? 'مفعّل' : 'غير مفعّل',
+                  status['apnsConfigured'] == true ? Icons.check_circle : Icons.cancel,
+                  status['apnsConfigured'] == true ? Colors.green : Colors.red,
+                ),
+                if (status['apnsError'] != null)
+                  _buildStatusRow('خطأ APNS', status['apnsError'], Icons.error, Colors.red),
+              ],
+              _buildStatusRow(
+                'Tokens في Firestore',
+                '${status['tokensInFirestore'] ?? 0}',
+                (status['tokensInFirestore'] ?? 0) > 0 ? Icons.check_circle : Icons.cancel,
+                (status['tokensInFirestore'] ?? 0) > 0 ? Colors.green : Colors.red,
+              ),
+              const Divider(),
+              const SizedBox(height: 10),
+              Text(
+                'الحلول الممكنة:',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade700),
+              ),
+              const SizedBox(height: 5),
+              if (status['fcmTokenAvailable'] != true)
+                const Text('• تأكد من تفعيل إشعارات التطبيق في إعدادات الجهاز'),
+              if (status['platform'] == 'ios' && status['apnsConfigured'] != true)
+                const Text('• iOS: تأكد من إعداد APNs في Firebase Console'),
+              if ((status['tokensInFirestore'] ?? 0) == 0)
+                const Text('• سجّل خروج وأعد تسجيل الدخول'),
+              const Text('• تأكد من نشر Cloud Functions في Firebase'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              // Try to register token again
+              final authProvider = context.read<AuthProvider>();
+              if (authProvider.user != null) {
+                await FCMService.registerToken(authProvider.user!.id);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('تم محاولة تسجيل Token جديد')),
+                );
+              }
+            },
+            child: const Text('إعادة تسجيل Token'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إغلاق'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(String label, String value, IconData icon, [Color? color]) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color ?? Colors.grey),
+          const SizedBox(width: 8),
+          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(color: color ?? Colors.black87),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -80,50 +80,121 @@ class FCMService {
   /// Get FCM token for this device (with iOS APNS retry)
   static Future<String?> getToken() async {
     try {
+      print('🔍 FCM: Getting token, platform=${Platform.operatingSystem}');
+
       // On iOS, APNS token may not be available immediately (especially on simulators)
       if (Platform.isIOS) {
         try {
           // Try to get APNS token with shorter timeout
           String? apnsToken;
           for (int i = 0; i < 3; i++) {
+            print('🔍 FCM: Attempting to get APNS token (attempt ${i + 1}/3)');
             apnsToken = await _messaging.getAPNSToken();
-            if (apnsToken != null) break;
+            if (apnsToken != null) {
+              print('✅ FCM: APNS token obtained');
+              break;
+            }
             await Future.delayed(const Duration(seconds: 1));
           }
 
           if (apnsToken == null) {
-            print('⚠️ APNS token not available - FCM may not work on this iOS device');
+            print('❌ FCM ERROR: APNS token not available - FCM will not work on this iOS device');
+            print('❌ FCM ERROR: Make sure you have a valid APNs key configured in Firebase Console');
             // On iOS simulator or without proper APNS setup, skip FCM
             return null;
           }
         } catch (e) {
-          print('⚠️ APNS not configured: $e');
+          print('❌ FCM ERROR: APNS exception: $e');
           return null;
         }
       }
 
+      print('🔍 FCM: Calling getToken()...');
       final token = await _messaging.getToken();
       if (token != null) {
-        print('📱 FCM Token obtained successfully');
+        print('✅ FCM Token obtained: ${token.substring(0, 20)}...');
+      } else {
+        print('❌ FCM ERROR: getToken() returned null');
       }
       return token;
-    } catch (e) {
-      print('⚠️ FCM token unavailable (this is OK on simulators): $e');
+    } catch (e, stackTrace) {
+      print('❌ FCM ERROR: Exception getting token: $e');
+      print('❌ FCM ERROR: Stack trace: $stackTrace');
       return null;
     }
   }
 
+  /// Debug method to check FCM status - call this to diagnose issues
+  static Future<Map<String, dynamic>> debugFCMStatus() async {
+    final Map<String, dynamic> status = {
+      'platform': Platform.operatingSystem,
+      'initialized': _initialized,
+      'currentUserId': _currentUserId,
+    };
+
+    try {
+      // Check permission
+      final settings = await _messaging.getNotificationSettings();
+      status['permissionStatus'] = settings.authorizationStatus.toString();
+      status['permissionGranted'] = settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional;
+
+      // Try to get token
+      if (Platform.isIOS) {
+        try {
+          final apnsToken = await _messaging.getAPNSToken();
+          status['apnsToken'] = apnsToken != null ? '${apnsToken.substring(0, 10)}...' : null;
+          status['apnsConfigured'] = apnsToken != null;
+        } catch (e) {
+          status['apnsError'] = e.toString();
+          status['apnsConfigured'] = false;
+        }
+      }
+
+      try {
+        final fcmToken = await _messaging.getToken();
+        status['fcmToken'] = fcmToken != null ? '${fcmToken.substring(0, 20)}...' : null;
+        status['fcmTokenAvailable'] = fcmToken != null;
+      } catch (e) {
+        status['fcmError'] = e.toString();
+        status['fcmTokenAvailable'] = false;
+      }
+
+      // Check if token is in Firestore
+      if (_currentUserId != null) {
+        try {
+          final userDoc = await _firestore.collection('users').doc(_currentUserId).get();
+          final userData = userDoc.data();
+          final tokens = userData?['fcmTokens'] as List<dynamic>? ?? [];
+          status['tokensInFirestore'] = tokens.length;
+          status['firestoreOK'] = true;
+        } catch (e) {
+          status['firestoreError'] = e.toString();
+          status['firestoreOK'] = false;
+        }
+      }
+
+    } catch (e) {
+      status['error'] = e.toString();
+    }
+
+    print('🔍 FCM Debug Status: $status');
+    return status;
+  }
+
   /// Register device token for a user
   static Future<void> registerToken(String userId) async {
+    print('🔍 FCM: registerToken called for user: $userId');
     _currentUserId = userId;
 
     final token = await getToken();
     if (token == null) {
-      // This is normal on iOS simulators - just skip registration
-      print('ℹ️ FCM registration skipped (no token available)');
+      print('❌ FCM ERROR: Cannot register - no token available');
+      print('❌ FCM ERROR: Check Firebase configuration and notification permissions');
       return;
     }
 
+    print('🔍 FCM: Token obtained, saving to Firestore...');
     try {
       // Add token to user's fcmTokens array (supports multiple devices)
       await _firestore.collection('users').doc(userId).update({
@@ -132,6 +203,7 @@ class FCMService {
       });
       print('✅ FCM token registered for user: $userId');
     } catch (e) {
+      print('⚠️ FCM: Update failed ($e), trying set with merge...');
       // If field doesn't exist, set it
       try {
         await _firestore.collection('users').doc(userId).set({
@@ -140,7 +212,7 @@ class FCMService {
         }, SetOptions(merge: true));
         print('✅ FCM token created for user: $userId');
       } catch (e2) {
-        print('❌ Error registering FCM token: $e2');
+        print('❌ FCM ERROR: Failed to save token to Firestore: $e2');
       }
     }
   }
