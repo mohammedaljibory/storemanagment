@@ -329,6 +329,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   _showAuthorizedStoresDialog(context, employee, storeProvider);
                 } else if (value == 'details') {
                   Navigator.pushNamed(context, AppRoutes.employeeDetail, arguments: employee.id);
+                } else if (value == 'view_location') {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.freeEmployeeLocation,
+                    arguments: {'employee': employee, 'attendanceId': null},
+                  );
                 }
               },
               itemBuilder: (context) => [
@@ -342,16 +348,29 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     ],
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'authorized_stores',
-                  child: Row(
-                    children: [
-                      Icon(Icons.storefront, size: 20, color: AppTheme.secondaryColor),
-                      SizedBox(width: 8),
-                      Text('المتاجر المصرح بها'),
-                    ],
+                // Show location option only for free employees
+                if (employee.isFreeEmployee)
+                  const PopupMenuItem(
+                    value: 'view_location',
+                    child: Row(
+                      children: [
+                        Icon(Icons.map, size: 20, color: AppTheme.secondaryColor),
+                        SizedBox(width: 8),
+                        Text('عرض الموقع'),
+                      ],
+                    ),
                   ),
-                ),
+                if (!employee.isFreeEmployee)
+                  const PopupMenuItem(
+                    value: 'authorized_stores',
+                    child: Row(
+                      children: [
+                        Icon(Icons.storefront, size: 20, color: AppTheme.secondaryColor),
+                        SizedBox(width: 8),
+                        Text('المتاجر المصرح بها'),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ],
@@ -375,9 +394,28 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              employee.name,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  employee.name,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                if (employee.isFreeEmployee) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.secondaryColor.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'حر',
+                      style: TextStyle(fontSize: 12, color: AppTheme.secondaryColor, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 20),
             ListTile(
@@ -388,19 +426,36 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 Navigator.pushNamed(context, AppRoutes.employeeDetail, arguments: employee.id);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.storefront, color: AppTheme.secondaryColor),
-              title: const Text('إدارة المتاجر المصرح بها'),
-              subtitle: Text(
-                employee.authorizedStoreIds.isEmpty
-                    ? 'لم يتم تحديد متاجر إضافية'
-                    : '${employee.authorizedStoreIds.length} متجر إضافي',
+            // Show location option for free employees
+            if (employee.isFreeEmployee)
+              ListTile(
+                leading: const Icon(Icons.map, color: AppTheme.secondaryColor),
+                title: const Text('عرض الموقع على الخريطة'),
+                subtitle: const Text('تتبع GPS مباشر'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.freeEmployeeLocation,
+                    arguments: {'employee': employee, 'attendanceId': null},
+                  );
+                },
               ),
-              onTap: () {
-                Navigator.pop(context);
-                _showAuthorizedStoresDialog(context, employee, storeProvider);
-              },
-            ),
+            // Show authorized stores for regular employees
+            if (!employee.isFreeEmployee)
+              ListTile(
+                leading: const Icon(Icons.storefront, color: AppTheme.secondaryColor),
+                title: const Text('إدارة المتاجر المصرح بها'),
+                subtitle: Text(
+                  employee.authorizedStoreIds.isEmpty
+                      ? 'لم يتم تحديد متاجر إضافية'
+                      : '${employee.authorizedStoreIds.length} متجر إضافي',
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showAuthorizedStoresDialog(context, employee, storeProvider);
+                },
+              ),
           ],
         ),
       ),

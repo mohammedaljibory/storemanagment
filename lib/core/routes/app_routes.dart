@@ -12,11 +12,13 @@ import '../../features/admin/screens/store_management_screen.dart';
 import '../../features/admin/screens/shift_management_screen.dart';
 import '../../features/admin/screens/employees_screen.dart';
 import '../../features/admin/screens/employee_detail_screen.dart';
+import '../../features/admin/screens/free_employee_location_screen.dart';
 import '../../features/requests/screens/requests_screen.dart' as req_screen;
 import '../../features/admin/screens/admin_requests_screen.dart';
 import '../../features/admin/screens/active_employees_by_store_screen.dart';
 import '../../features/admin/screens/tasks_by_employee_screen.dart';
 import '../../features/admin/screens/employee_report_screen.dart';
+import '../models/user_model.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -38,6 +40,7 @@ class AppRoutes {
   static const String activeEmployeesByStore = '/active-employees-by-store';
   static const String tasksByEmployee = '/tasks-by-employee';
   static const String employeeReport = '/employee-report';
+  static const String freeEmployeeLocation = '/free-employee-location';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -79,6 +82,12 @@ class AppRoutes {
         return _buildRoute(const TasksByEmployeeScreen());
       case employeeReport:
         return _buildRoute(const EmployeeReportScreen());
+      case freeEmployeeLocation:
+        final args = settings.arguments as Map<String, dynamic>;
+        return _buildRoute(FreeEmployeeLocationScreen(
+          employee: args['employee'] as UserModel,
+          attendanceId: args['attendanceId'] as String?,
+        ));
       default:
         return _buildRoute(
           Scaffold(
