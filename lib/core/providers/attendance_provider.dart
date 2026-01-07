@@ -651,6 +651,235 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
+  // ============ FREE EMPLOYEE CHECK-IN/OUT ============
+
+  /// Check-in for free employees (no store/shift required)
+  Future<bool> checkInFreeEmployee({
+    required String userId,
+    required String userName,
+    required double latitude,
+    required double longitude,
+  }) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      final now = DateTime.now();
+
+      // Create attendance record for free employee
+      final attendance = AttendanceModel(
+        id: '',
+        userId: userId,
+        userName: userName,
+        storeId: 'free_employee', // Special ID for free employees
+        storeName: 'موظف حر',
+        shiftId: 'free_employee',
+        shiftName: 'بدون وردية',
+        expectedStartTime: '00:00',
+        expectedEndTime: '23:59',
+        checkIn: now,
+        checkInLocation: LocationData(
+          latitude: latitude,
+          longitude: longitude,
+          address: 'موظف حر - تتبع GPS',
+        ),
+        isLate: false,
+        lateMinutes: 0,
+        penaltyMinutes: 0,
+        isCheckedOut: false,
+        employeeType: 'free', // Mark as free employee
+      );
+
+      // Check connectivity and save
+      final hasConnection = await _hasConnectivity();
+
+      if (hasConnection) {
+        // Save to Firebase
+        final docRef = await _firestore.collection('attendance').add({
+          ...attendance.toFirestore(),
+          'employeeType': 'free',
+          'currentLocation': {
+            'latitude': latitude,
+            'longitude': longitude,
+            'timestamp': now.toIso8601String(),
+          },
+        });
+        await docRef.update({'id': docRef.id});
+
+        final savedAttendance = attendance.copyWith(id: docRef.id);
+        _todayAttendance = savedAttendance;
+        _currentSession = savedAttendance;
+        _isCheckedIn = true;
+        _attendanceHistory.insert(0, savedAttendance);
+      } else {
+        // Save to offline queue
+        final offlineId = 'offline_${DateTime.now().millisecondsSinceEpoch}';
+        final offlineAttendance = attendance.copyWith(id: offlineId);
+
+        await _addToOfflineQueue({
+          'type': 'checkInFreeEmployee',
+          'data': {
+            ...offlineAttendance.toJson(),
+            'employeeType': 'free',
+          },
+          'timestamp': now.toIso8601String(),
+        });
+
+        _todayAttendance = offlineAttendance;
+        _currentSession = offlineAttendance;
+        _isCheckedIn = true;
+        _attendanceHistory.insert(0, offlineAttendance);
+
+        _errorMessage = 'تم تسجيل الحضور محلياً (بدون إنترنت)';
+      }
+
+      // Notify admin of check-in
+      await _firestore.collection('notifications').add({
+        'type': 'free_employee_checkin',
+        'title': 'تسجيل دخول موظف حر',
+        'body': '$userName قام بتسجيل الدخول',
+        'userId': userId,
+        'userName': userName,
+        'latitude': latitude,
+        'longitude': longitude,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'حدث خطأ أثناء تسجيل الدخول: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Check-out for free employees (no location validation)
+  Future<bool> checkOutFreeEmployee() async {
+    try {
+      if (_todayAttendance == null && _currentSession == null) {
+        _errorMessage = 'لم تقم بتسجيل الدخول اليوم';
+        notifyListeners();
+        return false;
+      }
+
+      final currentAttendance = _currentSession ?? _todayAttendance!;
+
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      final now = DateTime.now();
+
+      // Get current location for checkout record
+      Position? position;
+      try {
+        position = await _getCurrentLocation();
+      } catch (e) {
+        // Continue without location for free employees
+        print('Could not get location for free employee checkout: $e');
+      }
+
+      // Calculate total hours
+      final checkInTime = currentAttendance.checkIn;
+      double totalHours = now.difference(checkInTime).inMinutes / 60.0;
+
+      // Subtract break time
+      final breakMinutes = currentAttendance.totalBreakMinutes;
+      if (breakMinutes > 0) {
+        totalHours -= (breakMinutes / 60.0);
+        if (totalHours < 0) totalHours = 0;
+      }
+
+      // Prepare update data
+      final updateData = {
+        'checkOut': now.toIso8601String(),
+        'checkOutLocation': position != null
+            ? {
+                'latitude': position.latitude,
+                'longitude': position.longitude,
+                'address': 'موظف حر - نقطة الخروج',
+              }
+            : null,
+        'totalHours': totalHours,
+        'isEarlyLeave': false, // Free employees don't have early leave
+        'earlyLeaveMinutes': 0,
+        'isCheckedOut': true,
+      };
+
+      // Check connectivity and save
+      final hasConnection = await _hasConnectivity();
+
+      if (hasConnection && !currentAttendance.id.startsWith('offline_')) {
+        await _firestore.collection('attendance').doc(currentAttendance.id).update(updateData);
+      } else {
+        await _addToOfflineQueue({
+          'type': 'checkOutFreeEmployee',
+          'docId': currentAttendance.id,
+          'data': updateData,
+          'timestamp': now.toIso8601String(),
+        });
+
+        if (!hasConnection) {
+          _errorMessage = 'تم تسجيل الخروج محلياً (بدون إنترنت)';
+        }
+      }
+
+      // Update local state
+      final updatedAttendance = currentAttendance.copyWith(
+        checkOut: now,
+        checkOutLocation: position != null
+            ? LocationData(
+                latitude: position.latitude,
+                longitude: position.longitude,
+                address: 'موظف حر - نقطة الخروج',
+              )
+            : null,
+        totalHours: totalHours,
+        isEarlyLeave: false,
+        earlyLeaveMinutes: 0,
+        isCheckedOut: true,
+      );
+
+      _todayAttendance = updatedAttendance;
+      _currentSession = updatedAttendance;
+      _isCheckedIn = false;
+
+      // Update in history list
+      final index = _attendanceHistory.indexWhere((a) => a.id == currentAttendance.id);
+      if (index != -1) {
+        _attendanceHistory[index] = updatedAttendance;
+      }
+
+      // Notify admin of check-out
+      await _firestore.collection('notifications').add({
+        'type': 'free_employee_checkout',
+        'title': 'تسجيل خروج موظف حر',
+        'body': '${currentAttendance.userName} قام بتسجيل الخروج - ${totalHours.toStringAsFixed(1)} ساعة',
+        'userId': currentAttendance.userId,
+        'userName': currentAttendance.userName,
+        'totalHours': totalHours,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'حدث خطأ أثناء تسجيل الخروج: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   // ============ LOCATION ============
 
   /// Get current GPS location

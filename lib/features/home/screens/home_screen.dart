@@ -9,10 +9,12 @@ import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/store_provider.dart';
 import '../../../core/providers/shift_provider.dart';
 import '../../../core/models/store_model.dart';
+import '../../../core/models/user_model.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/routes/app_routes.dart' show AppRoutes;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/services/location_monitor_service.dart';
 import '../../tasks/screens/tasks_screen.dart';
 import '../../attendance/screens/attendance_screen.dart';
 import '../../profile/screens/profile_screen.dart';
@@ -669,21 +671,36 @@ class _DashboardTabState extends State<DashboardTab> {
               if (user == null) return;
 
               if (isCheckedIn) {
-                // Check Out - validate location at store
+                // Check Out
                 final currentSession = attendanceProvider.currentSession;
-                StoreModel? checkoutStore;
-                if (currentSession != null) {
-                  checkoutStore = storeProvider.getStoreById(currentSession.storeId);
-                  if (checkoutStore == null) {
-                    checkoutStore = await storeProvider.fetchStoreById(currentSession.storeId);
-                  }
-                }
 
-                final success = await attendanceProvider.checkOut(store: checkoutStore);
-                if (!success && context.mounted) {
-                  _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
-                } else if (success && context.mounted) {
-                  _showSuccessSnackbar(context, 'تم تسجيل الخروج بنجاح');
+                // Check if this is a free employee
+                if (user.isFreeEmployee == true) {
+                  // Free employee checkout - no location validation needed
+                  final success = await attendanceProvider.checkOutFreeEmployee();
+                  if (success && context.mounted) {
+                    // Stop GPS tracking
+                    await LocationMonitorService.stopFreeEmployeeTracking();
+                    _showSuccessSnackbar(context, 'تم تسجيل الخروج بنجاح');
+                  } else if (!success && context.mounted) {
+                    _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
+                  }
+                } else {
+                  // Regular employee checkout - validate location at store
+                  StoreModel? checkoutStore;
+                  if (currentSession != null) {
+                    checkoutStore = storeProvider.getStoreById(currentSession.storeId);
+                    if (checkoutStore == null) {
+                      checkoutStore = await storeProvider.fetchStoreById(currentSession.storeId);
+                    }
+                  }
+
+                  final success = await attendanceProvider.checkOut(store: checkoutStore);
+                  if (!success && context.mounted) {
+                    _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
+                  } else if (success && context.mounted) {
+                    _showSuccessSnackbar(context, 'تم تسجيل الخروج بنجاح');
+                  }
                 }
               } else {
                 // Check In with validation and multi-store support
@@ -1156,6 +1173,13 @@ class _DashboardTabState extends State<DashboardTab> {
     StoreProvider storeProvider,
     ShiftProvider shiftProvider,
   ) async {
+    // Check if this is a free employee
+    if (user.isFreeEmployee == true) {
+      await _handleFreeEmployeeCheckIn(context, user, attendanceProvider);
+      return;
+    }
+
+    // Regular employee check-in flow
     // Use effective shift (considers temporary shift)
     final effectiveShiftId = user.effectiveShiftId ?? user.shiftId;
 
@@ -1234,6 +1258,49 @@ class _DashboardTabState extends State<DashboardTab> {
       }
     } catch (e) {
       _showErrorDialog(context, 'فشل في الحصول على الموقع: $e');
+    }
+  }
+
+  /// Handle check-in for free employees (no store/shift required)
+  Future<void> _handleFreeEmployeeCheckIn(
+    BuildContext context,
+    dynamic user,
+    AttendanceProvider attendanceProvider,
+  ) async {
+    try {
+      // Get current location for tracking
+      final position = await _getCurrentLocation();
+
+      // Check in without store/shift validation
+      final success = await attendanceProvider.checkInFreeEmployee(
+        userId: user.id,
+        userName: user.name,
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+
+      if (!success && context.mounted) {
+        _showErrorDialog(context, attendanceProvider.errorMessage ?? 'فشل في تسجيل الدخول');
+        return;
+      }
+
+      if (success && context.mounted) {
+        // Start GPS tracking for free employee
+        final currentSession = attendanceProvider.currentSession;
+        if (currentSession != null) {
+          await LocationMonitorService.startFreeEmployeeTracking(
+            userId: user.id,
+            userName: user.name,
+            attendanceId: currentSession.id,
+          );
+        }
+
+        _showSuccessSnackbar(context, 'تم تسجيل الدخول بنجاح - تتبع GPS نشط');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showErrorDialog(context, 'فشل في الحصول على الموقع: $e');
+      }
     }
   }
 

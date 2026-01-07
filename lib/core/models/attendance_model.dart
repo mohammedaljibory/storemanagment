@@ -58,6 +58,9 @@ class AttendanceModel {
   // Status field for Firestore queries (null fields are not indexed)
   final bool isCheckedOut;
 
+  // Employee type for free employees
+  final String? employeeType; // 'regular' or 'free'
+
   AttendanceModel({
     required this.id,
     required this.userId,
@@ -85,6 +88,7 @@ class AttendanceModel {
     this.totalBreakMinutes = 0,
     this.breakOvertimeMinutes = 0,
     this.isCheckedOut = false,
+    this.employeeType,
   });
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
@@ -127,6 +131,7 @@ class AttendanceModel {
       totalBreakMinutes: json['totalBreakMinutes'] as int? ?? 0,
       breakOvertimeMinutes: json['breakOvertimeMinutes'] as int? ?? 0,
       isCheckedOut: json['isCheckedOut'] as bool? ?? (json['checkOut'] != null),
+      employeeType: json['employeeType'] as String?,
     );
   }
 
@@ -158,6 +163,7 @@ class AttendanceModel {
       'totalBreakMinutes': totalBreakMinutes,
       'breakOvertimeMinutes': breakOvertimeMinutes,
       'isCheckedOut': isCheckedOut,
+      'employeeType': employeeType,
     };
   }
 
@@ -190,6 +196,7 @@ class AttendanceModel {
       'totalBreakMinutes': totalBreakMinutes,
       'breakOvertimeMinutes': breakOvertimeMinutes,
       'isCheckedOut': isCheckedOut,
+      'employeeType': employeeType,
     };
   }
 
@@ -220,6 +227,7 @@ class AttendanceModel {
     int? totalBreakMinutes,
     int? breakOvertimeMinutes,
     bool? isCheckedOut,
+    String? employeeType,
   }) {
     return AttendanceModel(
       id: id ?? this.id,
@@ -248,8 +256,12 @@ class AttendanceModel {
       totalBreakMinutes: totalBreakMinutes ?? this.totalBreakMinutes,
       breakOvertimeMinutes: breakOvertimeMinutes ?? this.breakOvertimeMinutes,
       isCheckedOut: isCheckedOut ?? this.isCheckedOut,
+      employeeType: employeeType ?? this.employeeType,
     );
   }
+
+  /// Check if this is a free employee attendance
+  bool get isFreeEmployee => employeeType == 'free';
 
   // Helpers
   String get formattedCheckIn {
