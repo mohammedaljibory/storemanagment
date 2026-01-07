@@ -8,6 +8,7 @@ import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/providers/attendance_provider.dart';
 import '../../../core/models/attendance_model.dart';
+import '../../../core/models/request_model.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -93,6 +94,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
                   // Active Employees Section
                   _buildActiveEmployeesSection(context),
+                  const SizedBox(height: 25),
+
+                  // Vacation Employees Section
+                  _buildVacationEmployeesSection(context),
                   const SizedBox(height: 25),
 
                   // Management Cards
@@ -456,6 +461,128 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVacationEmployeesSection(BuildContext context) {
+    final requestProvider = context.watch<RequestProvider>();
+    final vacationEmployees = requestProvider.getEmployeesOnVacationToday();
+
+    // Don't show section if no one is on vacation
+    if (vacationEmployees.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade100,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(Icons.beach_access, color: Colors.blue.shade700),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'الموظفون في إجازة اليوم',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${vacationEmployees.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 15),
+        SizedBox(
+          height: 90,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: vacationEmployees.length,
+            itemBuilder: (context, index) {
+              final vacation = vacationEmployees[index];
+              return _buildVacationEmployeeCard(context, vacation, index);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVacationEmployeeCard(BuildContext context, RequestModel vacation, int index) {
+    return GlassContainer(
+      margin: EdgeInsetsDirectional.only(start: index == 0 ? 0 : 12),
+      padding: const EdgeInsets.all(12),
+      child: SizedBox(
+        width: 150,
+        height: 60,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.beach_access,
+                  size: 14,
+                  color: Colors.blue.shade700,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    vacation.employeeName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              vacation.storeName,
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 10,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            Text(
+              vacation.isMultiDay
+                  ? 'حتى ${vacation.endDate!.day}/${vacation.endDate!.month}'
+                  : 'إجازة يوم واحد',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.blue.shade700,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),

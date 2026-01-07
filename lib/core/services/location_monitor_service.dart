@@ -8,12 +8,14 @@ import 'notification_service.dart';
 
 /// Service to monitor employee location while checked in
 /// Alerts if employee moves outside the store's monitoring radius
+/// Auto-checkout after 10 minutes outside radius (unless on break)
 class LocationMonitorService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
 
   static StreamSubscription<Position>? _positionSubscription;
+  static Timer? _periodicLocationTimer;
   static bool _isMonitoring = false;
   static String? _currentUserId;
   static String? _currentUserName;
@@ -24,6 +26,16 @@ class LocationMonitorService {
   static bool _alertSent = false;
   static DateTime? _lastAlertTime;
 
+  // Auto-checkout tracking
+  static DateTime? _outsideRadiusSince;
+  static Timer? _autoCheckoutTimer;
+  static const int _autoCheckoutMinutes = 10; // 10 minutes outside = auto checkout
+  static const int _warningMinutes = 5; // Warning at 5 minutes
+  static bool _warningShown = false;
+
+  // Callback for auto-checkout
+  static Future<void> Function()? _onAutoCheckout;
+
   // Foreground notification ID for Android
   static const int _foregroundNotificationId = 8888;
 
@@ -33,12 +45,27 @@ class LocationMonitorService {
   /// Get the monitoring radius from current store (or default 400m)
   static double get _alertDistanceMeters => _currentStore?.monitoringRadius ?? 400.0;
 
+  /// Check if employee is currently outside radius
+  static bool get isOutsideRadius => _outsideRadiusSince != null;
+
+  /// Get minutes outside radius
+  static int get minutesOutsideRadius {
+    if (_outsideRadiusSince == null) return 0;
+    return DateTime.now().difference(_outsideRadiusSince!).inMinutes;
+  }
+
+  /// Set auto-checkout callback
+  static void setAutoCheckoutCallback(Future<void> Function() callback) {
+    _onAutoCheckout = callback;
+  }
+
   /// Start monitoring employee location using position stream
   static Future<void> startMonitoring({
     required String userId,
     required String userName,
     required StoreModel store,
     required AttendanceModel attendance,
+    Future<void> Function()? onAutoCheckout,
   }) async {
     // Stop any existing monitoring
     await stopMonitoring();
@@ -49,6 +76,11 @@ class LocationMonitorService {
     _currentAttendance = attendance;
     _isMonitoring = true;
     _alertSent = false;
+    _outsideRadiusSince = null;
+    _warningShown = false;
+    if (onAutoCheckout != null) {
+      _onAutoCheckout = onAutoCheckout;
+    }
 
     print('📍 Starting location monitoring for $userName at ${store.name}');
 
@@ -77,6 +109,12 @@ class LocationMonitorService {
       },
     );
 
+    // Start periodic location check (every 1-2 minutes)
+    _periodicLocationTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _checkCurrentLocation(),
+    );
+
     // Do initial check
     await _checkCurrentLocation();
   }
@@ -85,8 +123,14 @@ class LocationMonitorService {
   static Future<void> stopMonitoring() async {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
+    _periodicLocationTimer?.cancel();
+    _periodicLocationTimer = null;
+    _autoCheckoutTimer?.cancel();
+    _autoCheckoutTimer = null;
     _isMonitoring = false;
     _alertSent = false;
+    _outsideRadiusSince = null;
+    _warningShown = false;
     _currentUserId = null;
     _currentUserName = null;
     _currentStore = null;
@@ -98,9 +142,14 @@ class LocationMonitorService {
     print('📍 Stopped location monitoring');
   }
 
-  /// Pause monitoring during break (no 400m alerts)
+  /// Pause monitoring during break (no 400m alerts, no auto-checkout)
   static void pauseForBreak() {
     _isPausedForBreak = true;
+    // Cancel auto-checkout timer during break
+    _autoCheckoutTimer?.cancel();
+    _autoCheckoutTimer = null;
+    _outsideRadiusSince = null;
+    _warningShown = false;
     print('📍 Location monitoring paused for break');
   }
 
@@ -108,7 +157,11 @@ class LocationMonitorService {
   static void resumeFromBreak() {
     _isPausedForBreak = false;
     _alertSent = false; // Reset alert state
+    _outsideRadiusSince = null;
+    _warningShown = false;
     print('📍 Location monitoring resumed after break');
+    // Do immediate location check after resuming
+    _checkCurrentLocation();
   }
 
   /// Check if paused for break
@@ -132,20 +185,127 @@ class LocationMonitorService {
     print('📍 Position update: ${distance.toStringAsFixed(0)}m from store');
 
     if (distance > _alertDistanceMeters) {
-      _sendDistanceAlert(distance, position);
+      _handleOutsideRadius(distance, position);
     } else {
-      // Reset alert flag when back in range
-      if (_alertSent) {
-        print('📍 Employee back in range');
-        _alertSent = false;
-        _notifyBackInRange();
-      }
+      _handleInsideRadius();
+    }
+
+    // Store location history
+    _storeLocationHistory(position, distance);
+  }
+
+  /// Handle when employee is outside the allowed radius
+  static Future<void> _handleOutsideRadius(double distance, Position position) async {
+    // Start tracking time outside radius
+    if (_outsideRadiusSince == null) {
+      _outsideRadiusSince = DateTime.now();
+      print('📍 Employee left store radius at ${_outsideRadiusSince}');
+    }
+
+    final minutesOutside = DateTime.now().difference(_outsideRadiusSince!).inMinutes;
+
+    // Send initial alert
+    if (!_alertSent) {
+      await _sendDistanceAlert(distance, position);
+    }
+
+    // Show warning at 5 minutes
+    if (minutesOutside >= _warningMinutes && !_warningShown) {
+      _warningShown = true;
+      await NotificationService.showAlarmNotification(
+        id: 9002,
+        title: '⚠️ تحذير: ستسجل خروج تلقائي!',
+        body: 'أنت خارج نطاق العمل منذ $minutesOutside دقائق.\nسيتم تسجيل خروجك تلقائياً بعد ${_autoCheckoutMinutes - minutesOutside} دقائق.',
+      );
+
+      // Notify admin about warning
+      await _firestore.collection('notifications').add({
+        'type': 'location_warning',
+        'title': 'تحذير: موظف خارج نطاق العمل',
+        'body': '${_currentUserName} خارج نطاق ${_currentStore!.name} منذ $minutesOutside دقائق',
+        'userId': _currentUserId,
+        'userName': _currentUserName,
+        'storeId': _currentStore!.id,
+        'storeName': _currentStore!.name,
+        'distance': distance,
+        'minutesOutside': minutesOutside,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+    }
+
+    // Auto-checkout at 10 minutes
+    if (minutesOutside >= _autoCheckoutMinutes && _onAutoCheckout != null) {
+      print('📍 Auto-checkout triggered after $minutesOutside minutes outside radius');
+
+      // Notify before auto-checkout
+      await NotificationService.showAlarmNotification(
+        id: 9003,
+        title: '🚨 تم تسجيل خروجك تلقائياً',
+        body: 'تم تسجيل خروجك من ${_currentStore!.name} لأنك كنت خارج نطاق العمل لأكثر من $_autoCheckoutMinutes دقائق.',
+      );
+
+      // Notify admin about auto-checkout
+      await _firestore.collection('notifications').add({
+        'type': 'auto_checkout',
+        'title': 'تسجيل خروج تلقائي',
+        'body': 'تم تسجيل خروج ${_currentUserName} تلقائياً لخروجه عن نطاق ${_currentStore!.name} لأكثر من $_autoCheckoutMinutes دقائق',
+        'userId': _currentUserId,
+        'userName': _currentUserName,
+        'storeId': _currentStore!.id,
+        'storeName': _currentStore!.name,
+        'distance': distance,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'minutesOutside': minutesOutside,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      // Execute auto-checkout callback
+      await _onAutoCheckout!();
+    }
+  }
+
+  /// Handle when employee is back inside the allowed radius
+  static void _handleInsideRadius() {
+    // Reset alert flag when back in range
+    if (_alertSent || _outsideRadiusSince != null) {
+      print('📍 Employee back in range');
+      _alertSent = false;
+      _outsideRadiusSince = null;
+      _warningShown = false;
+      _notifyBackInRange();
+    }
+  }
+
+  /// Store location history in Firestore
+  static Future<void> _storeLocationHistory(Position position, double distance) async {
+    if (_currentAttendance == null) return;
+
+    try {
+      await _firestore.collection('location_history').add({
+        'attendanceId': _currentAttendance!.id,
+        'userId': _currentUserId,
+        'userName': _currentUserName,
+        'storeId': _currentStore?.id,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'distance': distance,
+        'isOutsideRadius': distance > _alertDistanceMeters,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('📍 Error storing location history: $e');
     }
   }
 
   /// Check current location (one-time)
   static Future<void> _checkCurrentLocation() async {
     if (!_isMonitoring || _currentStore == null) return;
+    if (_isPausedForBreak) return;
 
     try {
       final position = await Geolocator.getCurrentPosition(
@@ -157,11 +317,16 @@ class LocationMonitorService {
         position.longitude,
       );
 
-      print('📍 Initial check: ${distance.toStringAsFixed(0)}m from store');
+      print('📍 Periodic check: ${distance.toStringAsFixed(0)}m from store');
 
       if (distance > _alertDistanceMeters) {
-        await _sendDistanceAlert(distance, position);
+        await _handleOutsideRadius(distance, position);
+      } else {
+        _handleInsideRadius();
       }
+
+      // Store location history
+      await _storeLocationHistory(position, distance);
     } catch (e) {
       print('📍 Error checking location: $e');
     }
@@ -389,4 +554,216 @@ class LocationMonitorService {
 
   /// Check if currently monitoring
   static bool get isMonitoring => _isMonitoring;
+
+  // ============ FREE EMPLOYEE LOCATION TRACKING ============
+
+  static bool _isFreeEmployeeTracking = false;
+  static String? _freeEmployeeId;
+  static String? _freeEmployeeName;
+  static String? _freeEmployeeAttendanceId;
+  static Timer? _freeEmployeeLocationTimer;
+  static Position? _lastKnownPosition;
+
+  /// Check if free employee tracking is active
+  static bool get isFreeEmployeeTracking => _isFreeEmployeeTracking;
+
+  /// Get last known position of free employee
+  static Position? get lastKnownPosition => _lastKnownPosition;
+
+  /// Start tracking a free employee (no store constraint)
+  static Future<void> startFreeEmployeeTracking({
+    required String userId,
+    required String userName,
+    required String attendanceId,
+  }) async {
+    // Stop any existing tracking
+    await stopFreeEmployeeTracking();
+
+    _freeEmployeeId = userId;
+    _freeEmployeeName = userName;
+    _freeEmployeeAttendanceId = attendanceId;
+    _isFreeEmployeeTracking = true;
+
+    print('📍 Starting free employee tracking for $userName');
+
+    // Check and request permissions
+    final hasPermission = await _checkAndRequestPermission();
+    if (!hasPermission) {
+      print('📍 Location permission denied, cannot track');
+      return;
+    }
+
+    // Show foreground notification
+    await _showFreeEmployeeForegroundNotification();
+
+    // Start position stream
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 50, // Update every 50 meters movement
+    );
+
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen(
+      _onFreeEmployeePositionUpdate,
+      onError: (error) {
+        print('📍 Free employee position stream error: $error');
+      },
+    );
+
+    // Start periodic location tracking (every 2 minutes)
+    _freeEmployeeLocationTimer = Timer.periodic(
+      const Duration(minutes: 2),
+      (_) => _trackFreeEmployeeLocation(),
+    );
+
+    // Do initial tracking
+    await _trackFreeEmployeeLocation();
+  }
+
+  /// Stop free employee tracking
+  static Future<void> stopFreeEmployeeTracking() async {
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _freeEmployeeLocationTimer?.cancel();
+    _freeEmployeeLocationTimer = null;
+    _isFreeEmployeeTracking = false;
+    _freeEmployeeId = null;
+    _freeEmployeeName = null;
+    _freeEmployeeAttendanceId = null;
+    _lastKnownPosition = null;
+
+    // Cancel foreground notification
+    await _notifications.cancel(_foregroundNotificationId);
+
+    print('📍 Stopped free employee tracking');
+  }
+
+  /// Handle position updates for free employee
+  static Future<void> _onFreeEmployeePositionUpdate(Position position) async {
+    if (!_isFreeEmployeeTracking) return;
+
+    _lastKnownPosition = position;
+    print('📍 Free employee position update: ${position.latitude}, ${position.longitude}');
+
+    // Store location in Firestore
+    await _storeFreeEmployeeLocation(position);
+  }
+
+  /// Track free employee location (periodic)
+  static Future<void> _trackFreeEmployeeLocation() async {
+    if (!_isFreeEmployeeTracking) return;
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      _lastKnownPosition = position;
+      print('📍 Free employee periodic location: ${position.latitude}, ${position.longitude}');
+
+      // Store location in Firestore
+      await _storeFreeEmployeeLocation(position);
+    } catch (e) {
+      print('📍 Error tracking free employee location: $e');
+    }
+  }
+
+  /// Store free employee location in Firestore
+  static Future<void> _storeFreeEmployeeLocation(Position position) async {
+    if (_freeEmployeeAttendanceId == null) return;
+
+    try {
+      // Store in location_history collection
+      await _firestore.collection('location_history').add({
+        'attendanceId': _freeEmployeeAttendanceId,
+        'userId': _freeEmployeeId,
+        'userName': _freeEmployeeName,
+        'employeeType': 'free',
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'speed': position.speed,
+        'heading': position.heading,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      // Update current location in attendance record
+      await _firestore.collection('attendance').doc(_freeEmployeeAttendanceId).update({
+        'currentLocation': {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+        'lastLocationUpdate': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      print('📍 Error storing free employee location: $e');
+    }
+  }
+
+  /// Show foreground notification for free employee
+  static Future<void> _showFreeEmployeeForegroundNotification() async {
+    const androidDetails = AndroidNotificationDetails(
+      'location_monitoring',
+      'Location Monitoring',
+      channelDescription: 'Monitors your location during work',
+      importance: Importance.low,
+      priority: Priority.low,
+      ongoing: true,
+      autoCancel: false,
+      icon: '@mipmap/ic_launcher',
+      showWhen: false,
+    );
+
+    const details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      _foregroundNotificationId,
+      'تتبع الموقع نشط',
+      'يتم تسجيل موقعك خلال فترة العمل',
+      details,
+    );
+  }
+
+  /// Get free employee's current location (for admin to view)
+  static Future<Map<String, dynamic>?> getFreeEmployeeCurrentLocation(String attendanceId) async {
+    try {
+      final doc = await _firestore.collection('attendance').doc(attendanceId).get();
+      if (doc.exists && doc.data()?['currentLocation'] != null) {
+        return doc.data()!['currentLocation'] as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Error getting free employee location: $e');
+      return null;
+    }
+  }
+
+  /// Get free employee's location history (for admin to view)
+  static Future<List<Map<String, dynamic>>> getFreeEmployeeLocationHistory(String attendanceId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('location_history')
+          .where('attendanceId', isEqualTo: attendanceId)
+          .orderBy('timestamp', descending: true)
+          .limit(100)
+          .get();
+
+      return snapshot.docs.map((doc) => doc.data()).toList();
+    } catch (e) {
+      print('Error getting free employee location history: $e');
+      return [];
+    }
+  }
+
+  /// Stream of free employee's location (for real-time admin view)
+  static Stream<QuerySnapshot> freeEmployeeLocationStream(String attendanceId) {
+    return _firestore
+        .collection('location_history')
+        .where('attendanceId', isEqualTo: attendanceId)
+        .orderBy('timestamp', descending: true)
+        .limit(1)
+        .snapshots();
+  }
 }

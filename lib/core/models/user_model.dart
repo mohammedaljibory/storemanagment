@@ -2,6 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum UserRole { admin, employee }
 
+/// Employee type - determines work pattern
+enum EmployeeType {
+  regular,  // Regular employee - assigned to store and shift
+  free,     // Free employee - no store/shift, can check in anywhere, GPS tracked
+}
+
 class UserModel {
   final String id;
   final String name;
@@ -16,6 +22,9 @@ class UserModel {
   final DateTime createdAt;
   final bool isActive;
   final int daysOffPerMonth;
+
+  // Employee type: regular (default) or free (no store/shift, GPS tracked)
+  final EmployeeType employeeType;
 
   // Vacation balance tracking
   final int allowedVacationDays;    // Total vacation days allowed per year (set by admin)
@@ -49,6 +58,7 @@ class UserModel {
     required this.createdAt,
     this.isActive = true,
     this.daysOffPerMonth = 0,
+    this.employeeType = EmployeeType.regular,
     this.allowedVacationDays = 0,
     this.usedVacationDays = 0,
     this.vacationYear = 0,
@@ -75,6 +85,7 @@ class UserModel {
       createdAt: _parseDateTime(json['createdAt']),
       isActive: json['isActive'] as bool? ?? true,
       daysOffPerMonth: json['daysOffPerMonth'] as int? ?? 0,
+      employeeType: _parseEmployeeType(json['employeeType']),
       allowedVacationDays: json['allowedVacationDays'] as int? ?? 0,
       usedVacationDays: json['usedVacationDays'] as int? ?? 0,
       vacationYear: json['vacationYear'] as int? ?? DateTime.now().year,
@@ -90,16 +101,31 @@ class UserModel {
   /// Parse role from various formats
   static UserRole _parseRole(dynamic role) {
     if (role == null) return UserRole.employee;
-    
+
     String roleStr = role.toString().toLowerCase();
-    
+
     // Handle "UserRole.admin" format
     if (roleStr.contains('.')) {
       roleStr = roleStr.split('.').last;
     }
-    
+
     if (roleStr == 'admin') return UserRole.admin;
     return UserRole.employee;
+  }
+
+  /// Parse employee type from various formats
+  static EmployeeType _parseEmployeeType(dynamic type) {
+    if (type == null) return EmployeeType.regular;
+
+    String typeStr = type.toString().toLowerCase();
+
+    // Handle "EmployeeType.free" format
+    if (typeStr.contains('.')) {
+      typeStr = typeStr.split('.').last;
+    }
+
+    if (typeStr == 'free') return EmployeeType.free;
+    return EmployeeType.regular;
   }
 
   /// Parse DateTime from Firestore Timestamp or String
@@ -167,6 +193,7 @@ class UserModel {
       'createdAt': createdAt.toIso8601String(),
       'isActive': isActive,
       'daysOffPerMonth': daysOffPerMonth,
+      'employeeType': employeeType.toString().split('.').last,
       'allowedVacationDays': allowedVacationDays,
       'usedVacationDays': usedVacationDays,
       'vacationYear': vacationYear,
@@ -193,6 +220,7 @@ class UserModel {
     DateTime? createdAt,
     bool? isActive,
     int? daysOffPerMonth,
+    EmployeeType? employeeType,
     int? allowedVacationDays,
     int? usedVacationDays,
     int? vacationYear,
@@ -217,6 +245,7 @@ class UserModel {
       createdAt: createdAt ?? this.createdAt,
       isActive: isActive ?? this.isActive,
       daysOffPerMonth: daysOffPerMonth ?? this.daysOffPerMonth,
+      employeeType: employeeType ?? this.employeeType,
       allowedVacationDays: allowedVacationDays ?? this.allowedVacationDays,
       usedVacationDays: usedVacationDays ?? this.usedVacationDays,
       vacationYear: vacationYear ?? this.vacationYear,
@@ -245,6 +274,7 @@ class UserModel {
       createdAt: createdAt,
       isActive: isActive,
       daysOffPerMonth: daysOffPerMonth,
+      employeeType: employeeType,
       allowedVacationDays: allowedVacationDays,
       usedVacationDays: usedVacationDays,
       vacationYear: vacationYear,
@@ -255,6 +285,24 @@ class UserModel {
       fcmTokens: fcmTokens,
       authorizedStoreIds: authorizedStoreIds,
     );
+  }
+
+  // ============ EMPLOYEE TYPE HELPERS ============
+
+  /// Check if this is a free employee (no store/shift required)
+  bool get isFreeEmployee => employeeType == EmployeeType.free;
+
+  /// Check if this is a regular employee (requires store/shift)
+  bool get isRegularEmployee => employeeType == EmployeeType.regular;
+
+  /// Get employee type display text
+  String get employeeTypeText {
+    switch (employeeType) {
+      case EmployeeType.free:
+        return 'موظف حر';
+      case EmployeeType.regular:
+        return 'موظف عادي';
+    }
   }
 
   /// Check if employee is authorized to work at a specific store

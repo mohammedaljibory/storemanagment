@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/employee_provider.dart';
+import '../../../core/providers/request_provider.dart';
 import '../../../core/models/user_model.dart';
 import '../../../core/models/task_model.dart';
 import '../../../core/models/attendance_model.dart';
+import '../../../core/models/request_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../widgets/attendance_calendar_widget.dart';
 
 class EmployeeDetailScreen extends StatefulWidget {
   final String employeeId;
@@ -33,6 +36,10 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
     await context
         .read<EmployeeProvider>()
         .fetchEmployeeDashboard(widget.employeeId);
+    // Also fetch requests for vacation data
+    await context
+        .read<RequestProvider>()
+        .fetchEmployeeRequests(widget.employeeId);
   }
 
   @override
@@ -415,27 +422,186 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
 
   Widget _buildAttendanceTab(
       BuildContext context, List<AttendanceModel> attendance) {
-    if (attendance.isEmpty) {
-      return Center(
+    final requestProvider = context.watch<RequestProvider>();
+    final vacationRequests = requestProvider.getApprovedVacations(widget.employeeId);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Attendance Calendar
+          GlassContainer(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_month, color: AppTheme.primaryColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'تقويم الحضور',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                AttendanceCalendarWidget(
+                  attendanceRecords: attendance,
+                  vacationRequests: vacationRequests,
+                  onDaySelected: (date) {
+                    // Find record for selected day and show details
+                    final record = attendance.where((r) =>
+                      r.checkIn.year == date.year &&
+                      r.checkIn.month == date.month &&
+                      r.checkIn.day == date.day
+                    ).firstOrNull;
+
+                    if (record != null) {
+                      _showAttendanceDetails(context, record);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Recent Attendance Records
+          if (attendance.isNotEmpty) ...[
+            Text(
+              'سجلات الحضور',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...attendance.take(10).toList().asMap().entries.map((entry) {
+              return _buildAttendanceCard(context, entry.value, entry.key);
+            }),
+          ] else
+            Center(
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  Icon(Icons.calendar_today_outlined,
+                      size: 60, color: Colors.grey.withOpacity(0.3)),
+                  const SizedBox(height: 16),
+                  Text('لا توجد سجلات حضور', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showAttendanceDetails(BuildContext context, AttendanceModel record) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.calendar_today_outlined,
-                size: 60, color: Colors.grey.withOpacity(0.3)),
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              record.dateString,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 16),
-            Text('لا توجد سجلات حضور', style: TextStyle(color: Colors.grey)),
+            _buildDetailRow('الدخول', record.formattedCheckIn, record.expectedStartTime, record.isLate),
+            _buildDetailRow('الخروج', record.formattedCheckOut ?? '--:--', record.expectedEndTime, record.isEarlyLeave),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('إجمالي الساعات', style: TextStyle(color: Colors.grey)),
+                Text(
+                  record.formattedTotalHours,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('الحالة', style: TextStyle(color: Colors.grey)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: record.isCompliant
+                        ? AppTheme.successColor.withOpacity(0.2)
+                        : AppTheme.errorColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    record.complianceStatus,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: record.isCompliant ? AppTheme.successColor : AppTheme.errorColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
           ],
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      itemCount: attendance.length,
-      itemBuilder: (context, index) {
-        final record = attendance[index];
-        return _buildAttendanceCard(context, record, index);
-      },
+  Widget _buildDetailRow(String label, String actual, String expected, bool isIssue) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                actual,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isIssue ? AppTheme.errorColor : null,
+                ),
+              ),
+              Text(
+                'المتوقع: $expected',
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

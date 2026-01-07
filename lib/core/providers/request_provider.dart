@@ -551,4 +551,40 @@ class RequestProvider extends ChangeNotifier {
       return requests;
     });
   }
+
+  /// Get all employees on vacation today
+  List<RequestModel> getEmployeesOnVacationToday() {
+    final today = DateTime.now();
+    return _requests.where((r) =>
+        r.status == RequestStatus.approved &&
+        r.type == RequestType.fullDayOff &&
+        r.coversDate(today)).toList();
+  }
+
+  /// Get count of employees on vacation today
+  int get employeesOnVacationTodayCount => getEmployeesOnVacationToday().length;
+
+  /// Stream of approved vacations that cover today
+  Stream<List<RequestModel>> vacationsTodayStream() {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    final todayEnd = todayStart.add(const Duration(days: 1));
+
+    return _firestore
+        .collection('requests')
+        .where('status', isEqualTo: 'approved')
+        .where('type', isEqualTo: 'fullDayOff')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+            data['id'] = doc.id;
+            _convertTimestamps(data);
+            return RequestModel.fromJson(data);
+          })
+          .where((r) => r.coversDate(today))
+          .toList();
+    });
+  }
 }
