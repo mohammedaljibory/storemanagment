@@ -21,6 +21,7 @@ class FCMService {
 
   static bool _initialized = false;
   static String? _currentUserId;
+  static String? _currentToken; // Store the current token for logout
 
   /// Initialize FCM service
   static Future<void> init() async {
@@ -194,6 +195,9 @@ class FCMService {
       return;
     }
 
+    // Store token for later use (logout)
+    _currentToken = token;
+
     print('🔍 FCM: Token obtained, saving to Firestore...');
     try {
       // Add token to user's fcmTokens array (supports multiple devices)
@@ -219,8 +223,22 @@ class FCMService {
 
   /// Unregister device token (on logout)
   static Future<void> unregisterToken(String userId) async {
-    final token = await getToken();
-    if (token == null) return;
+    print('🔍 FCM: unregisterToken called for user: $userId');
+
+    // Use stored token first, fallback to getting new token
+    String? token = _currentToken;
+    if (token == null) {
+      print('🔍 FCM: No stored token, trying to get token...');
+      token = await getToken();
+    }
+
+    if (token == null) {
+      print('⚠️ FCM: No token available to unregister');
+      // Still clear local state
+      _currentUserId = null;
+      _currentToken = null;
+      return;
+    }
 
     try {
       await _firestore.collection('users').doc(userId).update({
@@ -231,14 +249,41 @@ class FCMService {
       print('❌ Error unregistering FCM token: $e');
     }
 
+    // Clear local state
     _currentUserId = null;
+    _currentToken = null;
   }
 
   /// Handle token refresh
   static Future<void> _handleTokenRefresh(String newToken) async {
-    print('🔄 FCM Token refreshed');
+    print('🔄 FCM Token refreshed: ${newToken.substring(0, 20)}...');
+
+    // Remove old token if exists
+    if (_currentUserId != null && _currentToken != null) {
+      try {
+        await _firestore.collection('users').doc(_currentUserId).update({
+          'fcmTokens': FieldValue.arrayRemove([_currentToken]),
+        });
+        print('✅ Old FCM token removed');
+      } catch (e) {
+        print('⚠️ Error removing old token: $e');
+      }
+    }
+
+    // Store new token
+    _currentToken = newToken;
+
+    // Register new token
     if (_currentUserId != null) {
-      await registerToken(_currentUserId!);
+      try {
+        await _firestore.collection('users').doc(_currentUserId).update({
+          'fcmTokens': FieldValue.arrayUnion([newToken]),
+          'lastTokenUpdate': FieldValue.serverTimestamp(),
+        });
+        print('✅ New FCM token registered');
+      } catch (e) {
+        print('⚠️ Error registering new token: $e');
+      }
     }
   }
 
