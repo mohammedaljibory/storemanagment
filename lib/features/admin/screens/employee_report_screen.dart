@@ -501,6 +501,30 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
     final arabicFont = await PdfGoogleFonts.cairoRegular();
     final arabicBoldFont = await PdfGoogleFonts.cairoBold();
 
+    // Merge attendance and vacation days into a unified list sorted by date
+    final List<_DayRecord> allDays = [];
+
+    // Add attendance records
+    for (final a in attendance) {
+      allDays.add(_DayRecord(
+        date: DateTime(a.checkIn.year, a.checkIn.month, a.checkIn.day),
+        type: _DayType.attendance,
+        attendance: a,
+      ));
+    }
+
+    // Add vacation days
+    for (final d in dayOffs) {
+      allDays.add(_DayRecord(
+        date: DateTime(d.targetDate.year, d.targetDate.month, d.targetDate.day),
+        type: _DayType.vacation,
+        vacation: d,
+      ));
+    }
+
+    // Sort by date (newest first)
+    allDays.sort((a, b) => b.date.compareTo(a.date));
+
     pdf.addPage(
       pw.MultiPage(
         theme: pw.ThemeData.withFont(
@@ -515,13 +539,13 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
         build: (context) {
           final List<pw.Widget> widgets = [];
 
-          // Attendance Section
-          if (attendance.isNotEmpty) {
-            widgets.add(_buildPdfSection('سجل الحضور', arabicBoldFont));
+          // Combined Days Section (Attendance + Vacations)
+          if (allDays.isNotEmpty) {
+            widgets.add(_buildPdfSection('سجل الأيام', arabicBoldFont));
             widgets.add(pw.SizedBox(height: 10));
-            widgets.add(_buildAttendanceTable(attendance, dateFormat, timeFormat, arabicFont));
+            widgets.add(_buildCombinedDaysTable(allDays, dateFormat, timeFormat, arabicFont));
             widgets.add(pw.SizedBox(height: 20));
-            widgets.add(_buildAttendanceSummary(attendance, arabicFont, arabicBoldFont));
+            widgets.add(_buildCombinedSummary(attendance, dayOffs, arabicFont, arabicBoldFont));
             widgets.add(pw.SizedBox(height: 30));
           }
 
@@ -531,13 +555,6 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
             widgets.add(pw.SizedBox(height: 10));
             widgets.add(_buildTasksTable(tasks, dateFormat, arabicFont));
             widgets.add(pw.SizedBox(height: 30));
-          }
-
-          // Day Offs Section
-          if (dayOffs.isNotEmpty) {
-            widgets.add(_buildPdfSection('الإجازات المعتمدة', arabicBoldFont));
-            widgets.add(pw.SizedBox(height: 10));
-            widgets.add(_buildDayOffsTable(dayOffs, dateFormat, arabicFont));
           }
 
           if (widgets.isEmpty) {
@@ -557,6 +574,97 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
     );
 
     return pdf;
+  }
+
+  pw.Widget _buildCombinedDaysTable(
+    List<_DayRecord> days,
+    intl.DateFormat dateFormat,
+    intl.DateFormat timeFormat,
+    pw.Font font,
+  ) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(2),
+        1: const pw.FlexColumnWidth(1.2),
+        2: const pw.FlexColumnWidth(1.2),
+        3: const pw.FlexColumnWidth(1.2),
+        4: const pw.FlexColumnWidth(1),
+        5: const pw.FlexColumnWidth(1.5),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: [
+            _buildTableHeader('التاريخ', font),
+            _buildTableHeader('النوع', font),
+            _buildTableHeader('الدخول', font),
+            _buildTableHeader('الخروج', font),
+            _buildTableHeader('الساعات', font),
+            _buildTableHeader('الحالة', font),
+          ],
+        ),
+        ...days.map((day) {
+          if (day.type == _DayType.vacation) {
+            return pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.orange50),
+              children: [
+                _buildTableCell(dateFormat.format(day.date), font),
+                _buildTableCell('إجازة', font, color: PdfColors.orange),
+                _buildTableCell('--', font),
+                _buildTableCell('--', font),
+                _buildTableCell('--', font),
+                _buildTableCell(day.vacation?.reason ?? 'إجازة معتمدة', font, color: PdfColors.orange),
+              ],
+            );
+          } else {
+            final a = day.attendance!;
+            return pw.TableRow(
+              children: [
+                _buildTableCell(dateFormat.format(day.date), font),
+                _buildTableCell('حضور', font, color: PdfColors.blue),
+                _buildTableCell(timeFormat.format(a.checkIn), font),
+                _buildTableCell(a.checkOut != null ? timeFormat.format(a.checkOut!) : '--', font),
+                _buildTableCell(a.totalHours?.toStringAsFixed(1) ?? '--', font),
+                _buildTableCell(a.isLate ? 'متأخر' : 'منتظم', font,
+                    color: a.isLate ? PdfColors.red : PdfColors.green),
+              ],
+            );
+          }
+        }),
+      ],
+    );
+  }
+
+  pw.Widget _buildCombinedSummary(
+    List<AttendanceModel> attendance,
+    List<RequestModel> dayOffs,
+    pw.Font font,
+    pw.Font boldFont,
+  ) {
+    final totalAttendanceDays = attendance.length;
+    final totalVacationDays = dayOffs.length;
+    final lateDays = attendance.where((a) => a.isLate).length;
+    final totalHours = attendance.fold<double>(0, (sum, a) => sum + (a.totalHours ?? 0));
+    final totalLateMinutes = attendance.fold<int>(0, (sum, a) => sum + a.lateMinutes);
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(5),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+        children: [
+          _buildSummaryItem('أيام الحضور', '$totalAttendanceDays', font, boldFont),
+          _buildSummaryItem('أيام الإجازة', '$totalVacationDays', font, boldFont, color: PdfColors.orange),
+          _buildSummaryItem('أيام التأخير', '$lateDays', font, boldFont, color: PdfColors.red),
+          _buildSummaryItem('إجمالي الساعات', totalHours.toStringAsFixed(1), font, boldFont),
+          _buildSummaryItem('دقائق التأخير', '$totalLateMinutes', font, boldFont),
+        ],
+      ),
+    );
   }
 
   pw.Widget _buildPdfHeader(UserModel employee, intl.DateFormat dateFormat, pw.Font boldFont) {
@@ -708,10 +816,10 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
     );
   }
 
-  pw.Widget _buildSummaryItem(String label, String value, pw.Font font, pw.Font boldFont) {
+  pw.Widget _buildSummaryItem(String label, String value, pw.Font font, pw.Font boldFont, {PdfColor? color}) {
     return pw.Column(
       children: [
-        pw.Text(value, style: pw.TextStyle(font: boldFont, fontSize: 16, color: PdfColors.blue)),
+        pw.Text(value, style: pw.TextStyle(font: boldFont, fontSize: 16, color: color ?? PdfColors.blue)),
         pw.Text(label, style: pw.TextStyle(font: font, fontSize: 10, color: PdfColors.grey700)),
       ],
     );
@@ -799,4 +907,22 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
       ),
     );
   }
+}
+
+/// Enum for day record type
+enum _DayType { attendance, vacation }
+
+/// Helper class to hold a day record (either attendance or vacation)
+class _DayRecord {
+  final DateTime date;
+  final _DayType type;
+  final AttendanceModel? attendance;
+  final RequestModel? vacation;
+
+  _DayRecord({
+    required this.date,
+    required this.type,
+    this.attendance,
+    this.vacation,
+  });
 }
