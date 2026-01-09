@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -94,11 +95,35 @@ class LocationMonitorService {
     // Show foreground notification (keeps monitoring alive on Android)
     await _showForegroundNotification();
 
-    // Start position stream with background support
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 50, // Update every 50 meters movement
-    );
+    // Platform-specific location settings for better background support
+    late LocationSettings locationSettings;
+
+    if (Platform.isIOS) {
+      // iOS-specific settings for background location
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        activityType: ActivityType.otherNavigation,
+        distanceFilter: 50,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true, // Shows blue bar on iOS
+        allowBackgroundLocationUpdates: true,
+      );
+      print('📍 Using iOS AppleSettings for background location');
+    } else {
+      // Android settings
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 50,
+        forceLocationManager: false,
+        intervalDuration: const Duration(seconds: 30),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationText: 'يتم تتبع موقعك خلال فترة العمل',
+          notificationTitle: 'تتبع الموقع نشط',
+          enableWakeLock: true,
+        ),
+      );
+      print('📍 Using Android settings for background location');
+    }
 
     _positionSubscription = Geolocator.getPositionStream(
       locationSettings: locationSettings,
@@ -106,6 +131,8 @@ class LocationMonitorService {
       _onPositionUpdate,
       onError: (error) {
         print('📍 Position stream error: $error');
+        // Retry connection on error
+        _retryLocationStream();
       },
     );
 
@@ -140,6 +167,58 @@ class LocationMonitorService {
     await _notifications.cancel(_foregroundNotificationId);
 
     print('📍 Stopped location monitoring');
+  }
+
+  /// Retry location stream on error
+  static Future<void> _retryLocationStream() async {
+    if (!_isMonitoring || _currentStore == null) return;
+
+    print('📍 Retrying location stream connection...');
+    await Future.delayed(const Duration(seconds: 5));
+
+    if (!_isMonitoring) return;
+
+    // Cancel existing subscription
+    await _positionSubscription?.cancel();
+
+    // Recreate location stream
+    late LocationSettings locationSettings;
+
+    if (Platform.isIOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        activityType: ActivityType.otherNavigation,
+        distanceFilter: 50,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+        allowBackgroundLocationUpdates: true,
+      );
+    } else {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 50,
+        forceLocationManager: false,
+        intervalDuration: const Duration(seconds: 30),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationText: 'يتم تتبع موقعك خلال فترة العمل',
+          notificationTitle: 'تتبع الموقع نشط',
+          enableWakeLock: true,
+        ),
+      );
+    }
+
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen(
+      _onPositionUpdate,
+      onError: (error) {
+        print('📍 Position stream error on retry: $error');
+        // Try again after delay
+        Future.delayed(const Duration(seconds: 30), () => _retryLocationStream());
+      },
+    );
+
+    print('📍 Location stream reconnected');
   }
 
   /// Pause monitoring during break (no 400m alerts, no auto-checkout)
@@ -337,10 +416,18 @@ class LocationMonitorService {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       print('📍 Location services disabled');
+      // Show notification to user
+      await NotificationService.showAlarmNotification(
+        id: 9999,
+        title: 'خدمة الموقع معطلة',
+        body: 'يرجى تفعيل خدمة الموقع لتتبع الحضور',
+      );
       return false;
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
+    print('📍 Current location permission: $permission');
+
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
@@ -351,16 +438,29 @@ class LocationMonitorService {
 
     if (permission == LocationPermission.deniedForever) {
       print('📍 Location permission denied forever');
+      await NotificationService.showAlarmNotification(
+        id: 9998,
+        title: 'صلاحية الموقع مرفوضة',
+        body: 'يرجى تفعيل صلاحية الموقع من الإعدادات',
+      );
       return false;
     }
 
-    // For background location on Android 10+
+    // For background location (especially on iOS)
     if (permission == LocationPermission.whileInUse) {
-      // Request "always" permission for background tracking
-      permission = await Geolocator.requestPermission();
+      print('📍 Have "while in use" permission, requesting "always" for background...');
+      // On iOS, this will prompt for "always" permission
+      // On Android 10+, need to request separately
+      if (Platform.isAndroid) {
+        permission = await Geolocator.requestPermission();
+      }
+      // On iOS, "while in use" should still work with allowBackgroundLocationUpdates
+      // but user will see blue bar in status bar
     }
 
-    return true;
+    print('📍 Final location permission: $permission');
+    return permission == LocationPermission.always ||
+           permission == LocationPermission.whileInUse;
   }
 
   /// Show foreground notification to keep service alive

@@ -329,6 +329,8 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   _showAuthorizedStoresDialog(context, employee, storeProvider);
                 } else if (value == 'details') {
                   Navigator.pushNamed(context, AppRoutes.employeeDetail, arguments: employee.id);
+                } else if (value == 'edit') {
+                  _showEditEmployeeDialog(context, employee);
                 } else if (value == 'view_location') {
                   Navigator.pushNamed(
                     context,
@@ -345,6 +347,16 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       Icon(Icons.info_outline, size: 20),
                       SizedBox(width: 8),
                       Text('التفاصيل'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 20, color: AppTheme.primaryColor),
+                      SizedBox(width: 8),
+                      Text('تعديل'),
                     ],
                   ),
                 ),
@@ -879,6 +891,295 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   }
                 },
                 child: const Text('إضافة'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditEmployeeDialog(BuildContext context, UserModel employee) {
+    final nameController = TextEditingController(text: employee.name);
+    final emailController = TextEditingController(text: employee.email);
+    final phoneController = TextEditingController(text: employee.phone ?? '');
+    final daysOffController = TextEditingController(text: employee.daysOffPerMonth.toString());
+    final vacationDaysController = TextEditingController(text: employee.allowedVacationDays.toString());
+
+    final storeProvider = context.read<StoreProvider>();
+    final shiftProvider = context.read<ShiftProvider>();
+
+    // Find current store and shift
+    StoreModel? selectedStore;
+    ShiftModel? selectedShift;
+    bool isFreeEmployee = employee.isFreeEmployee;
+
+    if (!isFreeEmployee && employee.storeId != null) {
+      selectedStore = storeProvider.activeStores.where((s) => s.id == employee.storeId).firstOrNull;
+      if (selectedStore != null && employee.shiftId != null) {
+        selectedShift = shiftProvider.getShiftsByStore(selectedStore.id).where((s) => s.id == employee.shiftId).firstOrNull;
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(Icons.edit, color: AppTheme.primaryColor),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('تعديل بيانات الموظف')),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Employee Name
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'الاسم',
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Email (read-only - can't change Firebase Auth email easily)
+                  TextField(
+                    controller: emailController,
+                    enabled: false,
+                    decoration: const InputDecoration(
+                      labelText: 'البريد الإلكتروني (لا يمكن تغييره)',
+                      prefixIcon: Icon(Icons.email),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Phone
+                  TextField(
+                    controller: phoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'رقم الهاتف',
+                      prefixIcon: Icon(Icons.phone),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Free Employee Toggle
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isFreeEmployee
+                          ? AppTheme.secondaryColor.withOpacity(0.1)
+                          : Colors.grey.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isFreeEmployee
+                            ? AppTheme.secondaryColor
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.gps_fixed,
+                          color: isFreeEmployee ? AppTheme.secondaryColor : Colors.grey,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'موظف حر',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isFreeEmployee ? AppTheme.secondaryColor : Colors.grey.shade700,
+                                ),
+                              ),
+                              Text(
+                                'بدون متجر أو وردية - تتبع GPS كامل',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: isFreeEmployee,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              isFreeEmployee = value;
+                              if (value) {
+                                selectedStore = null;
+                                selectedShift = null;
+                              }
+                            });
+                          },
+                          activeColor: AppTheme.secondaryColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Days off per month
+                  TextField(
+                    controller: daysOffController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'أيام الإجازة شهرياً',
+                      prefixIcon: Icon(Icons.event_busy),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Vacation days
+                  TextField(
+                    controller: vacationDaysController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'رصيد الإجازات السنوية',
+                      prefixIcon: Icon(Icons.beach_access),
+                    ),
+                  ),
+
+                  // Store/Shift selection for regular employees
+                  if (!isFreeEmployee) ...[
+                    const SizedBox(height: 16),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Text(
+                      'المتجر والوردية',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Store dropdown
+                    DropdownButtonFormField<StoreModel>(
+                      value: selectedStore,
+                      decoration: const InputDecoration(
+                        labelText: 'المتجر',
+                        prefixIcon: Icon(Icons.store),
+                      ),
+                      items: storeProvider.activeStores.map((store) {
+                        return DropdownMenuItem(value: store, child: Text(store.name));
+                      }).toList(),
+                      onChanged: (value) {
+                        setDialogState(() {
+                          selectedStore = value;
+                          selectedShift = null; // Reset shift when store changes
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Shift dropdown (only if store is selected)
+                    if (selectedStore != null)
+                      DropdownButtonFormField<ShiftModel>(
+                        value: selectedShift,
+                        decoration: const InputDecoration(
+                          labelText: 'الوردية',
+                          prefixIcon: Icon(Icons.schedule),
+                        ),
+                        items: shiftProvider.getShiftsByStore(selectedStore!.id).map((shift) {
+                          return DropdownMenuItem(
+                            value: shift,
+                            child: Text('${shift.name} (${shift.startTime} - ${shift.endTime})'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedShift = value;
+                          });
+                        },
+                      ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  // Validation
+                  if (nameController.text.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('يرجى إدخال اسم الموظف'),
+                        backgroundColor: AppTheme.warningColor,
+                      ),
+                    );
+                    return;
+                  }
+
+                  if (!isFreeEmployee && (selectedStore == null || selectedShift == null)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('يرجى اختيار المتجر والوردية'),
+                        backgroundColor: AppTheme.warningColor,
+                      ),
+                    );
+                    return;
+                  }
+
+                  // Show loading
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+
+                  // Update employee
+                  final employeeProvider = context.read<EmployeeProvider>();
+                  final success = await employeeProvider.updateEmployee(
+                    employeeId: employee.id,
+                    name: nameController.text,
+                    phone: phoneController.text,
+                    storeId: isFreeEmployee ? null : selectedStore?.id,
+                    storeName: isFreeEmployee ? null : selectedStore?.name,
+                    shiftId: isFreeEmployee ? null : selectedShift?.id,
+                    shiftName: isFreeEmployee ? null : selectedShift?.name,
+                    daysOffPerMonth: int.tryParse(daysOffController.text) ?? 0,
+                    allowedVacationDays: int.tryParse(vacationDaysController.text) ?? 0,
+                    employeeType: isFreeEmployee ? EmployeeType.free : EmployeeType.regular,
+                  );
+
+                  // Close loading
+                  Navigator.pop(context);
+
+                  if (success) {
+                    // Close dialog
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تحديث بيانات الموظف بنجاح'),
+                        backgroundColor: AppTheme.successColor,
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(employeeProvider.errorMessage ?? 'فشل في تحديث البيانات'),
+                        backgroundColor: AppTheme.errorColor,
+                      ),
+                    );
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                child: const Text('حفظ التغييرات'),
               ),
             ],
           );

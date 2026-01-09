@@ -268,8 +268,8 @@ class EmployeeProvider extends ChangeNotifier {
     }
   }
 
-  /// Update employee in Firebase
-  Future<bool> updateEmployee(UserModel employee) async {
+  /// Update employee in Firebase (with UserModel)
+  Future<bool> updateEmployeeModel(UserModel employee) async {
     try {
       _isLoading = true;
       notifyListeners();
@@ -281,6 +281,94 @@ class EmployeeProvider extends ChangeNotifier {
       final index = _employees.indexWhere((e) => e.id == employee.id);
       if (index != -1) {
         _employees[index] = employee;
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'فشل في تحديث الموظف: $e';
+      notifyListeners();
+      print('Error updating employee: $e');
+      return false;
+    }
+  }
+
+  /// Update employee with individual parameters
+  Future<bool> updateEmployee({
+    required String employeeId,
+    String? name,
+    String? phone,
+    String? storeId,
+    String? storeName,
+    String? shiftId,
+    String? shiftName,
+    int? daysOffPerMonth,
+    int? allowedVacationDays,
+    EmployeeType? employeeType,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      // Find current employee
+      final currentEmployee = _employees.firstWhere(
+        (e) => e.id == employeeId,
+        orElse: () => throw Exception('Employee not found'),
+      );
+
+      // Build update map
+      final Map<String, dynamic> updateData = {};
+
+      if (name != null) updateData['name'] = name;
+      if (phone != null) updateData['phone'] = phone;
+
+      // Handle employee type change
+      if (employeeType != null) {
+        updateData['employeeType'] = employeeType == EmployeeType.free ? 'free' : 'regular';
+
+        if (employeeType == EmployeeType.free) {
+          // Clear store/shift for free employees
+          updateData['storeId'] = null;
+          updateData['storeName'] = null;
+          updateData['shiftId'] = null;
+          updateData['shiftName'] = null;
+        } else {
+          // Set store/shift for regular employees
+          updateData['storeId'] = storeId;
+          updateData['storeName'] = storeName;
+          updateData['shiftId'] = shiftId;
+          updateData['shiftName'] = shiftName;
+        }
+      } else {
+        // Only update store/shift if provided
+        if (storeId != null) updateData['storeId'] = storeId;
+        if (storeName != null) updateData['storeName'] = storeName;
+        if (shiftId != null) updateData['shiftId'] = shiftId;
+        if (shiftName != null) updateData['shiftName'] = shiftName;
+      }
+
+      if (daysOffPerMonth != null) updateData['daysOffPerMonth'] = daysOffPerMonth;
+      if (allowedVacationDays != null) updateData['allowedVacationDays'] = allowedVacationDays;
+
+      // Update in Firestore
+      await _firestore.collection('users').doc(employeeId).update(updateData);
+
+      // Update local list
+      final index = _employees.indexWhere((e) => e.id == employeeId);
+      if (index != -1) {
+        _employees[index] = currentEmployee.copyWith(
+          name: name ?? currentEmployee.name,
+          phone: phone ?? currentEmployee.phone,
+          storeId: employeeType == EmployeeType.free ? null : (storeId ?? currentEmployee.storeId),
+          storeName: employeeType == EmployeeType.free ? null : (storeName ?? currentEmployee.storeName),
+          shiftId: employeeType == EmployeeType.free ? null : (shiftId ?? currentEmployee.shiftId),
+          shiftName: employeeType == EmployeeType.free ? null : (shiftName ?? currentEmployee.shiftName),
+          daysOffPerMonth: daysOffPerMonth ?? currentEmployee.daysOffPerMonth,
+          allowedVacationDays: allowedVacationDays ?? currentEmployee.allowedVacationDays,
+          employeeType: employeeType ?? currentEmployee.employeeType,
+        );
       }
 
       _isLoading = false;
