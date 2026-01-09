@@ -295,6 +295,7 @@ class AttendanceProvider extends ChangeNotifier {
     required String userName,
     required StoreModel store,
     required ShiftModel shift,
+    bool skipTimeValidation = false, // For secondary stores
   }) async {
     try {
       _isLoading = true;
@@ -312,21 +313,28 @@ class AttendanceProvider extends ChangeNotifier {
         return false;
       }
 
-      // 2. Validate work day
-      if (!shift.isWorkDay(now)) {
+      // 2. Validate work day (skip for secondary stores)
+      if (!skipTimeValidation && !shift.isWorkDay(now)) {
         _isLoading = false;
         _errorMessage = 'اليوم ليس من أيام عملك\nأيام العمل: ${shift.workDaysText}';
         notifyListeners();
         return false;
       }
 
-      // 4. Validate time window
-      final checkInResult = shift.canCheckIn(now);
-      if (!checkInResult['allowed']) {
-        _isLoading = false;
-        _errorMessage = checkInResult['message'];
-        notifyListeners();
-        return false;
+      // 4. Validate time window (skip for secondary stores)
+      Map<String, dynamic> checkInResult;
+      if (skipTimeValidation) {
+        // For secondary stores, allow check-in anytime but still calculate late info
+        checkInResult = {'allowed': true, 'isLate': false, 'lateMinutes': 0};
+        print('📍 Secondary store check-in: skipping time validation');
+      } else {
+        checkInResult = shift.canCheckIn(now);
+        if (!checkInResult['allowed']) {
+          _isLoading = false;
+          _errorMessage = checkInResult['message'];
+          notifyListeners();
+          return false;
+        }
       }
 
       // 5. Get current location

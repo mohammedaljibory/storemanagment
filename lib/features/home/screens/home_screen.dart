@@ -1243,17 +1243,38 @@ class _DashboardTabState extends State<DashboardTab> {
         if (store.id == user.storeId) {
           await _performCheckIn(context, user, store, shift, attendanceProvider);
         } else {
-          // Ask confirmation for secondary store
-          final confirmed = await _showStoreConfirmationDialog(context, store);
-          if (confirmed == true && context.mounted) {
-            await _performCheckIn(context, user, store, shift, attendanceProvider);
+          // Secondary store - get shifts for this store
+          final storeShifts = shiftProvider.getShiftsByStore(store.id);
+          if (storeShifts.isEmpty) {
+            await shiftProvider.fetchShifts(store.id);
+          }
+          final availableShifts = shiftProvider.getShiftsByStore(store.id);
+
+          // Ask confirmation for secondary store and select shift
+          final result = await _showSecondaryStoreCheckInDialog(context, store, availableShifts);
+          if (result != null && context.mounted) {
+            final selectedShift = result['shift'] as ShiftModel?;
+            // Use selected shift or allow without time restriction for secondary stores
+            await _performCheckIn(
+              context, user, store,
+              selectedShift ?? shift,
+              attendanceProvider,
+              isSecondaryStore: true,
+            );
           }
         }
       } else {
         // Multiple stores in range - let user choose
-        final selectedStore = await _showStoreSelectionDialog(context, storesInRange, user.storeId);
-        if (selectedStore != null && context.mounted) {
-          await _performCheckIn(context, user, selectedStore, shift, attendanceProvider);
+        final result = await _showMultiStoreSelectionDialog(context, storesInRange, user.storeId, shiftProvider);
+        if (result != null && context.mounted) {
+          final selectedStore = result['store'] as StoreModel;
+          final selectedShift = result['shift'] as ShiftModel?;
+          await _performCheckIn(
+            context, user, selectedStore,
+            selectedShift ?? shift,
+            attendanceProvider,
+            isSecondaryStore: selectedStore.id != user.storeId,
+          );
         }
       }
     } catch (e) {
@@ -1310,23 +1331,26 @@ class _DashboardTabState extends State<DashboardTab> {
     dynamic user,
     StoreModel store,
     dynamic shift,
-    AttendanceProvider attendanceProvider,
-  ) async {
+    AttendanceProvider attendanceProvider, {
+    bool isSecondaryStore = false,
+  }) async {
     final success = await attendanceProvider.checkIn(
       userId: user.id,
       userName: user.name,
       store: store,
       shift: shift,
+      skipTimeValidation: isSecondaryStore, // Skip time validation for secondary stores
     );
 
     if (!success && context.mounted) {
       _showErrorDialog(context, attendanceProvider.errorMessage ?? 'حدث خطأ');
     } else if (success && context.mounted) {
       final checkInResult = shift.canCheckIn();
-      if (checkInResult['isLate'] == true) {
+      if (!isSecondaryStore && checkInResult['isLate'] == true) {
         _showLateWarning(context, checkInResult['lateMinutes'] ?? 0);
       } else {
-        _showSuccessSnackbar(context, 'تم تسجيل الحضور بنجاح في ${store.name}');
+        final storeLabel = isSecondaryStore ? '(متجر إضافي)' : '';
+        _showSuccessSnackbar(context, 'تم تسجيل الحضور بنجاح في ${store.name} $storeLabel');
       }
     }
   }
@@ -1537,6 +1561,288 @@ class _DashboardTabState extends State<DashboardTab> {
             child: const Text('إلغاء'),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Show dialog for check-in at secondary store with shift selection
+  Future<Map<String, dynamic>?> _showSecondaryStoreCheckInDialog(
+    BuildContext context,
+    StoreModel store,
+    List<ShiftModel> availableShifts,
+  ) async {
+    ShiftModel? selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.storefront, color: AppTheme.secondaryColor),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(child: Text('تسجيل في متجر إضافي')),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.store, color: AppTheme.primaryColor),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(store.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(store.address, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (availableShifts.isNotEmpty) ...[
+                const Text('اختر الشفت:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                ...availableShifts.map((shift) => RadioListTile<ShiftModel>(
+                  value: shift,
+                  groupValue: selectedShift,
+                  title: Text(shift.name),
+                  subtitle: Text('${shift.startTime} - ${shift.endTime}'),
+                  onChanged: (value) => setDialogState(() => selectedShift = value),
+                  activeColor: AppTheme.secondaryColor,
+                  dense: true,
+                )),
+              ] else
+                const Text(
+                  'لا توجد ورديات محددة لهذا المتجر.\nسيتم التسجيل بدون قيود وقتية.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.green, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'التسجيل في متجر إضافي لا يتطلب التزام بوقت الشفت الأساسي',
+                        style: TextStyle(fontSize: 11, color: Colors.green),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, {'store': store, 'shift': selectedShift}),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor),
+              child: const Text('تسجيل الحضور'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show dialog to select from multiple stores with shift selection
+  Future<Map<String, dynamic>?> _showMultiStoreSelectionDialog(
+    BuildContext context,
+    List<StoreModel> stores,
+    String? primaryStoreId,
+    ShiftProvider shiftProvider,
+  ) async {
+    StoreModel? selectedStore;
+    ShiftModel? selectedShift;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final availableShifts = selectedStore != null
+              ? shiftProvider.getShiftsByStore(selectedStore!.id)
+              : <ShiftModel>[];
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.store, color: AppTheme.primaryColor),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('اختر المتجر والشفت')),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('المتجر:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  ...stores.map((store) {
+                    final isPrimary = store.id == primaryStoreId;
+                    final isSelected = selectedStore?.id == store.id;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: () async {
+                          setDialogState(() {
+                            selectedStore = store;
+                            selectedShift = null;
+                          });
+                          // Fetch shifts for this store
+                          if (shiftProvider.getShiftsByStore(store.id).isEmpty) {
+                            await shiftProvider.fetchShifts(store.id);
+                            setDialogState(() {
+                              final shifts = shiftProvider.getShiftsByStore(store.id);
+                              if (shifts.isNotEmpty) selectedShift = shifts.first;
+                            });
+                          } else {
+                            final shifts = shiftProvider.getShiftsByStore(store.id);
+                            if (shifts.isNotEmpty) {
+                              setDialogState(() => selectedShift = shifts.first);
+                            }
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primaryColor.withOpacity(0.15)
+                                : (isPrimary ? AppTheme.successColor.withOpacity(0.1) : Colors.grey.withOpacity(0.1)),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected ? AppTheme.primaryColor : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isSelected ? Icons.check_circle : Icons.store,
+                                color: isSelected ? AppTheme.primaryColor : (isPrimary ? AppTheme.successColor : Colors.grey),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(store.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                        if (isPrimary) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.successColor,
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: const Text('أساسي', style: TextStyle(fontSize: 10, color: Colors.white)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    Text(store.address, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                  if (selectedStore != null && availableShifts.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text('الشفت:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    ...availableShifts.map((shift) => RadioListTile<ShiftModel>(
+                      value: shift,
+                      groupValue: selectedShift,
+                      title: Text(shift.name),
+                      subtitle: Text('${shift.startTime} - ${shift.endTime}'),
+                      onChanged: (value) => setDialogState(() => selectedShift = value),
+                      activeColor: AppTheme.secondaryColor,
+                      dense: true,
+                    )),
+                  ],
+                  if (selectedStore != null && selectedStore!.id != primaryStoreId)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.green, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'المتجر الإضافي لا يتطلب التزام بوقت الشفت',
+                              style: TextStyle(fontSize: 11, color: Colors.green),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: selectedStore == null
+                    ? null
+                    : () => Navigator.pop(context, {'store': selectedStore, 'shift': selectedShift}),
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.successColor),
+                child: const Text('تسجيل الحضور'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
