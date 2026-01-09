@@ -9,6 +9,9 @@ import '../../../core/providers/request_provider.dart';
 import '../../../core/providers/attendance_provider.dart';
 import '../../../core/models/attendance_model.dart';
 import '../../../core/models/request_model.dart';
+import '../../../core/models/user_model.dart';
+import '../../../core/models/store_model.dart';
+import '../../../core/models/shift_model.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
@@ -696,60 +699,378 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildVacationEmployeeCard(BuildContext context, RequestModel vacation, int index) {
-    return GlassContainer(
-      margin: EdgeInsetsDirectional.only(start: index == 0 ? 0 : 12),
-      padding: const EdgeInsets.all(12),
-      child: SizedBox(
-        width: 150,
-        height: 60,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.beach_access,
-                  size: 14,
-                  color: Colors.blue.shade700,
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(
-                    vacation.employeeName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
+    return GestureDetector(
+      onTap: () => _showAssignSubstituteDialog(context, vacation),
+      child: GlassContainer(
+        margin: EdgeInsetsDirectional.only(start: index == 0 ? 0 : 12),
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: 150,
+          height: 75,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.beach_access,
+                    size: 14,
+                    color: Colors.blue.shade700,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      vacation.employeeName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+              Text(
+                vacation.storeName,
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 10,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    vacation.isMultiDay
+                        ? 'حتى ${vacation.endDate!.day}/${vacation.endDate!.month}'
+                        : 'إجازة يوم واحد',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Icon(
+                    Icons.swap_horiz,
+                    size: 14,
+                    color: Colors.orange.shade700,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show dialog to assign a substitute employee for the absent employee
+  void _showAssignSubstituteDialog(BuildContext context, RequestModel vacation) {
+    final employeeProvider = context.read<EmployeeProvider>();
+    final storeProvider = context.read<StoreProvider>();
+
+    // Get available employees (exclude the one on vacation)
+    final availableEmployees = employeeProvider.activeEmployees
+        .where((e) => e.id != vacation.employeeId)
+        .toList();
+
+    if (availableEmployees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يوجد موظفين متاحين للتعيين كبديل'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
+    UserModel? selectedSubstitute;
+    StoreModel? selectedStore;
+    ShiftModel? selectedShift;
+
+    // Get the store for this vacation
+    final vacationStore = storeProvider.stores.firstWhere(
+      (s) => s.id == vacation.storeId,
+      orElse: () => storeProvider.stores.first,
+    );
+    selectedStore = vacationStore;
+
+    // Get shifts for the store
+    List<ShiftModel> availableShifts = selectedStore.shifts;
+    if (availableShifts.isNotEmpty) {
+      selectedShift = availableShifts.first;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.swap_horiz, color: Colors.orange, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'تعيين موظف بديل',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Absent employee info
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_off, color: Colors.blue.shade700, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'الموظف الغائب',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.blue.shade700,
+                              ),
+                            ),
+                            Text(
+                              vacation.employeeName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              vacation.storeName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Select substitute employee
+                const Text(
+                  'اختر الموظف البديل',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<UserModel>(
+                  value: selectedSubstitute,
+                  decoration: InputDecoration(
+                    hintText: 'اختر موظف',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: availableEmployees.map((e) {
+                    return DropdownMenuItem<UserModel>(
+                      value: e,
+                      child: Text(e.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedSubstitute = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Select store
+                const Text(
+                  'المتجر',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<StoreModel>(
+                  value: selectedStore,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: storeProvider.activeStores.map((s) {
+                    return DropdownMenuItem<StoreModel>(
+                      value: s,
+                      child: Text(s.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedStore = value;
+                      availableShifts = value?.shifts ?? [];
+                      selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Select shift
+                const Text(
+                  'الشفت',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<ShiftModel>(
+                  value: selectedShift,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: availableShifts.map((s) {
+                    return DropdownMenuItem<ShiftModel>(
+                      value: s,
+                      child: Text('${s.name} (${s.startTime} - ${s.endTime})'),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedShift = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Info message
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'سيتم احتساب ساعات العمل كـ "أوفر تايم" للموظف البديل',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            Text(
-              vacation.storeName,
-              style: const TextStyle(
-                color: Colors.grey,
-                fontSize: 10,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
             ),
-            Text(
-              vacation.isMultiDay
-                  ? 'حتى ${vacation.endDate!.day}/${vacation.endDate!.month}'
-                  : 'إجازة يوم واحد',
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.blue.shade700,
-                fontWeight: FontWeight.w500,
+            ElevatedButton.icon(
+              onPressed: selectedSubstitute != null && selectedStore != null && selectedShift != null
+                  ? () async {
+                      Navigator.pop(ctx);
+                      await _assignSubstitute(
+                        context,
+                        substituteEmployee: selectedSubstitute!,
+                        store: selectedStore!,
+                        shift: selectedShift!,
+                        absentEmployeeId: vacation.employeeId,
+                        absentEmployeeName: vacation.employeeName,
+                      );
+                    }
+                  : null,
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('تعيين البديل'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _assignSubstitute(
+    BuildContext context, {
+    required UserModel substituteEmployee,
+    required StoreModel store,
+    required ShiftModel shift,
+    required String absentEmployeeId,
+    required String absentEmployeeName,
+  }) async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final attendanceProvider = context.read<AttendanceProvider>();
+      final success = await attendanceProvider.checkInAsSubstitute(
+        userId: substituteEmployee.id,
+        userName: substituteEmployee.name,
+        store: store,
+        shift: shift,
+        substituteForUserId: absentEmployeeId,
+        substituteForUserName: absentEmployeeName,
+      );
+
+      Navigator.pop(context); // Close loading
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم تعيين ${substituteEmployee.name} كبديل عن $absentEmployeeName'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        // Refresh data
+        await _loadData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(attendanceProvider.errorMessage ?? 'حدث خطأ أثناء تعيين البديل'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
   }
 
   Widget _buildManagementSection(BuildContext context) {

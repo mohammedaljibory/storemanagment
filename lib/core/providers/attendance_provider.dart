@@ -888,6 +888,131 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
+  // ============ SUBSTITUTE EMPLOYEE CHECK-IN ============
+
+  /// Check-in as substitute for absent employee (counts as overtime)
+  Future<bool> checkInAsSubstitute({
+    required String userId,
+    required String userName,
+    required StoreModel store,
+    required ShiftModel shift,
+    required String substituteForUserId,
+    required String substituteForUserName,
+  }) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      final now = DateTime.now();
+
+      // Get current location
+      Position position;
+      try {
+        position = await _getCurrentLocation();
+      } catch (e) {
+        _isLoading = false;
+        _errorMessage = 'فشل في الحصول على الموقع: $e';
+        notifyListeners();
+        return false;
+      }
+
+      // Validate distance from store
+      final distance = store.getDistanceFrom(position.latitude, position.longitude);
+      if (!store.isWithinRadius(position.latitude, position.longitude)) {
+        _isLoading = false;
+        _errorMessage = 'يجب أن تكون داخل نطاق المتجر\n'
+            'النطاق المسموح: ${store.allowedRadius.toStringAsFixed(0)} متر\n'
+            'المسافة الحالية: ${distance.toStringAsFixed(0)} متر';
+        notifyListeners();
+        return false;
+      }
+
+      // Create substitute attendance record
+      final attendance = AttendanceModel(
+        id: '',
+        userId: userId,
+        userName: userName,
+        storeId: store.id,
+        storeName: store.name,
+        shiftId: shift.id,
+        shiftName: shift.name,
+        expectedStartTime: shift.startTime,
+        expectedEndTime: shift.endTime,
+        checkIn: now,
+        checkInLocation: LocationData(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          address: store.name,
+        ),
+        isLate: false, // Substitutes are not marked late
+        lateMinutes: 0,
+        penaltyMinutes: 0,
+        isCheckedOut: false,
+        isSubstitute: true,
+        substituteForUserId: substituteForUserId,
+        substituteForUserName: substituteForUserName,
+      );
+
+      // Save to Firestore
+      final docRef = await _firestore.collection('attendance').add(attendance.toFirestore());
+      await docRef.update({'id': docRef.id});
+
+      final savedAttendance = attendance.copyWith(id: docRef.id);
+
+      // Update local state
+      _isCheckedIn = true;
+      _todayAttendance = savedAttendance;
+      _currentSession = savedAttendance;
+      _attendanceHistory.insert(0, savedAttendance);
+
+      // Notify admin of substitute check-in
+      await _firestore.collection('notifications').add({
+        'type': 'substitute_checkin',
+        'title': 'تسجيل بديل',
+        'body': '$userName سجل حضور كبديل عن $substituteForUserName في ${store.name}',
+        'userId': userId,
+        'userName': userName,
+        'substituteForUserId': substituteForUserId,
+        'substituteForUserName': substituteForUserName,
+        'storeId': store.id,
+        'storeName': store.name,
+        'checkInTime': now.toIso8601String(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'حدث خطأ أثناء تسجيل الحضور كبديل: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Get substitute attendance records for reporting
+  List<AttendanceModel> getSubstituteAttendanceForUser(String userId) {
+    return _attendanceHistory.where((a) =>
+      a.userId == userId && a.isSubstitute
+    ).toList();
+  }
+
+  /// Calculate total substitute hours for a user in a month
+  double getSubstituteHoursForMonth(String userId, int year, int month) {
+    final records = _attendanceHistory.where((a) =>
+      a.userId == userId &&
+      a.isSubstitute &&
+      a.checkIn.year == year &&
+      a.checkIn.month == month &&
+      a.totalHours != null
+    );
+    return records.fold<double>(0, (sum, a) => sum + (a.totalHours ?? 0));
+  }
+
   // ============ LOCATION ============
 
   /// Get current GPS location

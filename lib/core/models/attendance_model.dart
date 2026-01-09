@@ -61,6 +61,11 @@ class AttendanceModel {
   // Employee type for free employees
   final String? employeeType; // 'regular' or 'free'
 
+  // Substitute employee fields
+  final bool isSubstitute; // Whether this is a substitute shift
+  final String? substituteForUserId; // ID of the absent employee being covered
+  final String? substituteForUserName; // Name of the absent employee
+
   AttendanceModel({
     required this.id,
     required this.userId,
@@ -89,6 +94,9 @@ class AttendanceModel {
     this.breakOvertimeMinutes = 0,
     this.isCheckedOut = false,
     this.employeeType,
+    this.isSubstitute = false,
+    this.substituteForUserId,
+    this.substituteForUserName,
   });
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
@@ -132,6 +140,9 @@ class AttendanceModel {
       breakOvertimeMinutes: json['breakOvertimeMinutes'] as int? ?? 0,
       isCheckedOut: json['isCheckedOut'] as bool? ?? (json['checkOut'] != null),
       employeeType: json['employeeType'] as String?,
+      isSubstitute: json['isSubstitute'] as bool? ?? false,
+      substituteForUserId: json['substituteForUserId'] as String?,
+      substituteForUserName: json['substituteForUserName'] as String?,
     );
   }
 
@@ -164,6 +175,9 @@ class AttendanceModel {
       'breakOvertimeMinutes': breakOvertimeMinutes,
       'isCheckedOut': isCheckedOut,
       'employeeType': employeeType,
+      'isSubstitute': isSubstitute,
+      'substituteForUserId': substituteForUserId,
+      'substituteForUserName': substituteForUserName,
     };
   }
 
@@ -197,6 +211,9 @@ class AttendanceModel {
       'breakOvertimeMinutes': breakOvertimeMinutes,
       'isCheckedOut': isCheckedOut,
       'employeeType': employeeType,
+      'isSubstitute': isSubstitute,
+      'substituteForUserId': substituteForUserId,
+      'substituteForUserName': substituteForUserName,
     };
   }
 
@@ -228,6 +245,9 @@ class AttendanceModel {
     int? breakOvertimeMinutes,
     bool? isCheckedOut,
     String? employeeType,
+    bool? isSubstitute,
+    String? substituteForUserId,
+    String? substituteForUserName,
   }) {
     return AttendanceModel(
       id: id ?? this.id,
@@ -257,6 +277,9 @@ class AttendanceModel {
       breakOvertimeMinutes: breakOvertimeMinutes ?? this.breakOvertimeMinutes,
       isCheckedOut: isCheckedOut ?? this.isCheckedOut,
       employeeType: employeeType ?? this.employeeType,
+      isSubstitute: isSubstitute ?? this.isSubstitute,
+      substituteForUserId: substituteForUserId ?? this.substituteForUserId,
+      substituteForUserName: substituteForUserName ?? this.substituteForUserName,
     );
   }
 

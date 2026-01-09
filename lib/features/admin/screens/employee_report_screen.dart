@@ -504,11 +504,24 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
     // Merge attendance and vacation days into a unified list sorted by date
     final List<_DayRecord> allDays = [];
 
-    // Add attendance records
-    for (final a in attendance) {
+    // Separate regular attendance from substitute attendance
+    final regularAttendance = attendance.where((a) => !a.isSubstitute).toList();
+    final substituteAttendance = attendance.where((a) => a.isSubstitute).toList();
+
+    // Add regular attendance records
+    for (final a in regularAttendance) {
       allDays.add(_DayRecord(
         date: DateTime(a.checkIn.year, a.checkIn.month, a.checkIn.day),
         type: _DayType.attendance,
+        attendance: a,
+      ));
+    }
+
+    // Add substitute attendance records
+    for (final a in substituteAttendance) {
+      allDays.add(_DayRecord(
+        date: DateTime(a.checkIn.year, a.checkIn.month, a.checkIn.day),
+        type: _DayType.substitute,
         attendance: a,
       ));
     }
@@ -524,6 +537,9 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
 
     // Sort by date (newest first)
     allDays.sort((a, b) => b.date.compareTo(a.date));
+
+    // Calculate substitute hours (overtime)
+    final substituteHours = substituteAttendance.fold<double>(0, (sum, a) => sum + (a.totalHours ?? 0));
 
     pdf.addPage(
       pw.MultiPage(
@@ -545,7 +561,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
             widgets.add(pw.SizedBox(height: 10));
             widgets.add(_buildCombinedDaysTable(allDays, dateFormat, timeFormat, arabicFont));
             widgets.add(pw.SizedBox(height: 20));
-            widgets.add(_buildCombinedSummary(attendance, dayOffs, arabicFont, arabicBoldFont));
+            widgets.add(_buildCombinedSummary(regularAttendance, dayOffs, substituteHours, arabicFont, arabicBoldFont));
             widgets.add(pw.SizedBox(height: 30));
           }
 
@@ -617,7 +633,22 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
                 _buildTableCell(day.vacation?.reason ?? 'إجازة معتمدة', font, color: PdfColors.orange),
               ],
             );
+          } else if (day.type == _DayType.substitute) {
+            // Substitute shift (overtime)
+            final a = day.attendance!;
+            return pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.green50),
+              children: [
+                _buildTableCell(dateFormat.format(day.date), font),
+                _buildTableCell('بديل/أوفرتايم', font, color: PdfColors.green800),
+                _buildTableCell(timeFormat.format(a.checkIn), font),
+                _buildTableCell(a.checkOut != null ? timeFormat.format(a.checkOut!) : '--', font),
+                _buildTableCell(a.totalHours?.toStringAsFixed(1) ?? '--', font),
+                _buildTableCell('بديل عن ${a.substituteForUserName ?? ""}', font, color: PdfColors.green800),
+              ],
+            );
           } else {
+            // Regular attendance
             final a = day.attendance!;
             return pw.TableRow(
               children: [
@@ -639,6 +670,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
   pw.Widget _buildCombinedSummary(
     List<AttendanceModel> attendance,
     List<RequestModel> dayOffs,
+    double substituteHours,
     pw.Font font,
     pw.Font boldFont,
   ) {
@@ -654,14 +686,29 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
         border: pw.Border.all(color: PdfColors.grey300),
         borderRadius: pw.BorderRadius.circular(5),
       ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+      child: pw.Column(
         children: [
-          _buildSummaryItem('أيام الحضور', '$totalAttendanceDays', font, boldFont),
-          _buildSummaryItem('أيام الإجازة', '$totalVacationDays', font, boldFont, color: PdfColors.orange),
-          _buildSummaryItem('أيام التأخير', '$lateDays', font, boldFont, color: PdfColors.red),
-          _buildSummaryItem('إجمالي الساعات', totalHours.toStringAsFixed(1), font, boldFont),
-          _buildSummaryItem('دقائق التأخير', '$totalLateMinutes', font, boldFont),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+            children: [
+              _buildSummaryItem('أيام الحضور', '$totalAttendanceDays', font, boldFont),
+              _buildSummaryItem('أيام الإجازة', '$totalVacationDays', font, boldFont, color: PdfColors.orange),
+              _buildSummaryItem('أيام التأخير', '$lateDays', font, boldFont, color: PdfColors.red),
+              _buildSummaryItem('إجمالي الساعات', totalHours.toStringAsFixed(1), font, boldFont),
+              _buildSummaryItem('دقائق التأخير', '$totalLateMinutes', font, boldFont),
+            ],
+          ),
+          if (substituteHours > 0) ...[
+            pw.SizedBox(height: 10),
+            pw.Divider(color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.center,
+              children: [
+                _buildSummaryItem('ساعات أوفرتايم (بديل)', substituteHours.toStringAsFixed(1), font, boldFont, color: PdfColors.green800),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -910,9 +957,9 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
 }
 
 /// Enum for day record type
-enum _DayType { attendance, vacation }
+enum _DayType { attendance, vacation, substitute }
 
-/// Helper class to hold a day record (either attendance or vacation)
+/// Helper class to hold a day record (either attendance, vacation, or substitute)
 class _DayRecord {
   final DateTime date;
   final _DayType type;
@@ -925,4 +972,6 @@ class _DayRecord {
     this.attendance,
     this.vacation,
   });
+
+  bool get isSubstitute => type == _DayType.substitute;
 }
