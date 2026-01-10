@@ -7,6 +7,7 @@ import '../../../core/providers/employee_provider.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/providers/attendance_provider.dart';
+import '../../../core/providers/shift_provider.dart';
 import '../../../core/models/attendance_model.dart';
 import '../../../core/models/request_model.dart';
 import '../../../core/models/user_model.dart';
@@ -772,6 +773,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _showAssignSubstituteDialog(BuildContext context, RequestModel vacation) {
     final employeeProvider = context.read<EmployeeProvider>();
     final storeProvider = context.read<StoreProvider>();
+    final shiftProvider = context.read<ShiftProvider>();
 
     // Get available employees (exclude the one on vacation)
     final availableEmployees = employeeProvider.activeEmployees
@@ -799,8 +801,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
     selectedStore = vacationStore;
 
-    // Get shifts for the store
-    List<ShiftModel> availableShifts = selectedStore.shifts;
+    // Get shifts for the store from ShiftProvider
+    List<ShiftModel> availableShifts = shiftProvider.getShiftsByStore(selectedStore.id);
     if (availableShifts.isNotEmpty) {
       selectedShift = availableShifts.first;
     }
@@ -926,7 +928,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   onChanged: (value) {
                     setDialogState(() {
                       selectedStore = value;
-                      availableShifts = value?.shifts ?? [];
+                      availableShifts = value != null ? shiftProvider.getShiftsByStore(value.id) : [];
                       selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
                     });
                   },

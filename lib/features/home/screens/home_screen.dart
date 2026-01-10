@@ -9,6 +9,7 @@ import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/store_provider.dart';
 import '../../../core/providers/shift_provider.dart';
 import '../../../core/models/store_model.dart';
+import '../../../core/models/shift_model.dart';
 import '../../../core/models/user_model.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/routes/app_routes.dart' show AppRoutes;
