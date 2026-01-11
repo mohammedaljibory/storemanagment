@@ -564,6 +564,9 @@ class RequestProvider extends ChangeNotifier {
   /// Get count of employees on vacation today
   int get employeesOnVacationTodayCount => getEmployeesOnVacationToday().length;
 
+  /// Get today's vacations (alias for getEmployeesOnVacationToday)
+  List<RequestModel> get todayVacations => getEmployeesOnVacationToday();
+
   /// Stream of approved vacations that cover today
   Stream<List<RequestModel>> vacationsTodayStream() {
     final today = DateTime.now();
