@@ -70,6 +70,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showAddOvertimeDialog(context),
+        backgroundColor: Colors.green,
+        icon: const Icon(Icons.more_time, color: Colors.white),
+        label: const Text('أوفرتايم', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -1060,6 +1066,260 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(attendanceProvider.errorMessage ?? 'حدث خطأ أثناء تعيين البديل'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('حدث خطأ: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  /// Show dialog to add overtime for any employee (without absent employee)
+  void _showAddOvertimeDialog(BuildContext context) {
+    final employeeProvider = context.read<EmployeeProvider>();
+    final storeProvider = context.read<StoreProvider>();
+    final shiftProvider = context.read<ShiftProvider>();
+
+    final employees = employeeProvider.activeEmployees;
+
+    if (employees.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('لا يوجد موظفين'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
+    UserModel? selectedEmployee;
+    StoreModel? selectedStore;
+    ShiftModel? selectedShift;
+
+    // Initialize with first store
+    if (storeProvider.activeStores.isNotEmpty) {
+      selectedStore = storeProvider.activeStores.first;
+    }
+
+    // Get shifts for the selected store
+    List<ShiftModel> availableShifts = selectedStore != null
+        ? shiftProvider.getShiftsByStore(selectedStore.id)
+        : [];
+    if (availableShifts.isNotEmpty) {
+      selectedShift = availableShifts.first;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.more_time, color: Colors.green, size: 20),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'تسجيل أوفرتايم',
+                  style: TextStyle(fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Select employee
+                const Text(
+                  'اختر الموظف',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<UserModel>(
+                  value: selectedEmployee,
+                  decoration: InputDecoration(
+                    hintText: 'اختر موظف',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: employees.map((e) {
+                    return DropdownMenuItem<UserModel>(
+                      value: e,
+                      child: Text(e.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedEmployee = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Select store
+                const Text(
+                  'المتجر',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<StoreModel>(
+                  value: selectedStore,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: storeProvider.activeStores.map((s) {
+                    return DropdownMenuItem<StoreModel>(
+                      value: s,
+                      child: Text(s.name),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedStore = value;
+                      availableShifts = value != null ? shiftProvider.getShiftsByStore(value.id) : [];
+                      selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Select shift
+                const Text(
+                  'الشفت',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<ShiftModel>(
+                  value: selectedShift,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: availableShifts.map((s) {
+                    return DropdownMenuItem<ShiftModel>(
+                      value: s,
+                      child: Text('${s.name} (${s.startTime} - ${s.endTime})'),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedShift = value);
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Info message
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.green.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'سيتم تسجيل حضور الموظف كـ "أوفرتايم" وتُحتسب الساعات إضافية',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton.icon(
+              onPressed: selectedEmployee != null && selectedStore != null && selectedShift != null
+                  ? () async {
+                      Navigator.pop(ctx);
+                      await _registerOvertime(
+                        context,
+                        employee: selectedEmployee!,
+                        store: selectedStore!,
+                        shift: selectedShift!,
+                      );
+                    }
+                  : null,
+              icon: const Icon(Icons.check, size: 18),
+              label: const Text('تسجيل أوفرتايم'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _registerOvertime(
+    BuildContext context, {
+    required UserModel employee,
+    required StoreModel store,
+    required ShiftModel shift,
+  }) async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final attendanceProvider = context.read<AttendanceProvider>();
+      final success = await attendanceProvider.checkInAsOvertime(
+        userId: employee.id,
+        userName: employee.name,
+        store: store,
+        shift: shift,
+      );
+
+      Navigator.pop(context); // Close loading
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم تسجيل أوفرتايم لـ ${employee.name} في ${store.name}'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        // Refresh data
+        await _loadData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(attendanceProvider.errorMessage ?? 'حدث خطأ أثناء تسجيل الأوفرتايم'),
             backgroundColor: AppTheme.errorColor,
           ),
         );

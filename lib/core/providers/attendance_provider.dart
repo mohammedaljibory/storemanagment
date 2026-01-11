@@ -1013,6 +1013,83 @@ class AttendanceProvider extends ChangeNotifier {
     return records.fold<double>(0, (sum, a) => sum + (a.totalHours ?? 0));
   }
 
+  // ============ OVERTIME CHECK-IN (Admin assigns overtime without absent employee) ============
+
+  /// Check-in as overtime (admin assigns overtime shift without needing absent employee)
+  Future<bool> checkInAsOvertime({
+    required String userId,
+    required String userName,
+    required StoreModel store,
+    required ShiftModel shift,
+  }) async {
+    try {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+
+      final now = DateTime.now();
+
+      // Create overtime attendance record (marked as substitute but without substituteFor)
+      final attendance = AttendanceModel(
+        id: '',
+        userId: userId,
+        userName: userName,
+        storeId: store.id,
+        storeName: store.name,
+        shiftId: shift.id,
+        shiftName: shift.name,
+        expectedStartTime: shift.startTime,
+        expectedEndTime: shift.endTime,
+        checkIn: now,
+        checkInLocation: LocationData(
+          latitude: store.latitude,
+          longitude: store.longitude,
+          address: store.name,
+        ),
+        isLate: false, // Overtime is not marked late
+        lateMinutes: 0,
+        penaltyMinutes: 0,
+        isCheckedOut: false,
+        isSubstitute: true, // Mark as overtime/substitute
+        substituteForUserId: null, // No specific absent employee
+        substituteForUserName: 'أوفرتايم', // Just overtime label
+      );
+
+      // Save to Firestore
+      final docRef = await _firestore.collection('attendance').add(attendance.toFirestore());
+      await docRef.update({'id': docRef.id});
+
+      final savedAttendance = attendance.copyWith(id: docRef.id);
+
+      // Update local state
+      _attendanceHistory.insert(0, savedAttendance);
+
+      // Notify admin of overtime check-in
+      await _firestore.collection('notifications').add({
+        'type': 'overtime_checkin',
+        'title': 'تسجيل أوفرتايم',
+        'body': '$userName تم تسجيله أوفرتايم في ${store.name}',
+        'userId': userId,
+        'userName': userName,
+        'storeId': store.id,
+        'storeName': store.name,
+        'checkInTime': now.toIso8601String(),
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'حدث خطأ أثناء تسجيل الأوفرتايم: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   // ============ LOCATION ============
 
   /// Get current GPS location

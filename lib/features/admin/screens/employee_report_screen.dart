@@ -636,15 +636,22 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
           } else if (day.type == _DayType.substitute) {
             // Substitute shift (overtime)
             final a = day.attendance!;
+            final isJustOvertime = a.substituteForUserName == null ||
+                                   a.substituteForUserName == 'أوفرتايم' ||
+                                   a.substituteForUserName!.isEmpty;
             return pw.TableRow(
               decoration: const pw.BoxDecoration(color: PdfColors.green50),
               children: [
                 _buildTableCell(dateFormat.format(day.date), font),
-                _buildTableCell('بديل/أوفرتايم', font, color: PdfColors.green800),
+                _buildTableCell(isJustOvertime ? 'أوفرتايم' : 'بديل', font, color: PdfColors.green800),
                 _buildTableCell(timeFormat.format(a.checkIn), font),
                 _buildTableCell(a.checkOut != null ? timeFormat.format(a.checkOut!) : '--', font),
                 _buildTableCell(a.totalHours?.toStringAsFixed(1) ?? '--', font),
-                _buildTableCell('بديل عن ${a.substituteForUserName ?? ""}', font, color: PdfColors.green800),
+                _buildTableCell(
+                  isJustOvertime ? 'ساعات إضافية' : 'بديل عن ${a.substituteForUserName}',
+                  font,
+                  color: PdfColors.green800,
+                ),
               ],
             );
           } else {
