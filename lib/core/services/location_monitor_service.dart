@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:geolocator/geolocator.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/store_model.dart';
 import '../models/attendance_model.dart';
 import 'notification_service.dart';
@@ -446,21 +447,97 @@ class LocationMonitorService {
       return false;
     }
 
-    // For background location (especially on iOS)
+    // For background location - we need "Always" permission
     if (permission == LocationPermission.whileInUse) {
-      print('📍 Have "while in use" permission, requesting "always" for background...');
-      // On iOS, this will prompt for "always" permission
-      // On Android 10+, need to request separately
-      if (Platform.isAndroid) {
-        permission = await Geolocator.requestPermission();
+      print('📍 Have "while in use" permission, need "always" for background...');
+
+      // Request "Always" permission
+      final alwaysStatus = await Permission.locationAlways.request();
+
+      if (alwaysStatus.isGranted) {
+        print('📍 "Always" permission granted');
+        permission = LocationPermission.always;
+      } else {
+        // Show warning that background monitoring may not work
+        print('📍 "Always" permission NOT granted - background monitoring limited');
+        await NotificationService.showAlarmNotification(
+          id: 9997,
+          title: '⚠️ تنبيه: صلاحية الموقع محدودة',
+          body: 'لتفعيل مراقبة الموقع في الخلفية، اذهب للإعدادات واختر "دائماً" لصلاحية الموقع',
+        );
       }
-      // On iOS, "while in use" should still work with allowBackgroundLocationUpdates
-      // but user will see blue bar in status bar
+    }
+
+    // Request battery optimization exemption on Android
+    if (Platform.isAndroid) {
+      await _requestBatteryOptimizationExemption();
     }
 
     print('📍 Final location permission: $permission');
     return permission == LocationPermission.always ||
            permission == LocationPermission.whileInUse;
+  }
+
+  /// Request exemption from battery optimization (Android)
+  static Future<void> _requestBatteryOptimizationExemption() async {
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      print('📍 Battery optimization status: $status');
+
+      if (!status.isGranted) {
+        print('📍 Requesting battery optimization exemption...');
+        final result = await Permission.ignoreBatteryOptimizations.request();
+
+        if (result.isGranted) {
+          print('📍 Battery optimization exemption granted');
+        } else {
+          print('📍 Battery optimization exemption denied');
+          // Show notification
+          await NotificationService.showNotification(
+            id: 9996,
+            title: 'تحسين البطارية',
+            body: 'لضمان عمل تتبع الموقع، يرجى استثناء التطبيق من تحسين البطارية',
+          );
+        }
+      } else {
+        print('📍 Already exempt from battery optimization');
+      }
+    } catch (e) {
+      print('📍 Error requesting battery optimization exemption: $e');
+    }
+  }
+
+  /// Check if we have proper background location permission
+  static Future<bool> hasBackgroundLocationPermission() async {
+    if (Platform.isAndroid) {
+      final always = await Permission.locationAlways.isGranted;
+      final battery = await Permission.ignoreBatteryOptimizations.isGranted;
+      return always && battery;
+    } else {
+      // iOS
+      final permission = await Geolocator.checkPermission();
+      return permission == LocationPermission.always;
+    }
+  }
+
+  /// Get detailed permission status for debugging
+  static Future<Map<String, dynamic>> getPermissionStatus() async {
+    final geoPermission = await Geolocator.checkPermission();
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    Map<String, dynamic> status = {
+      'serviceEnabled': serviceEnabled,
+      'geolocatorPermission': geoPermission.toString(),
+      'platform': Platform.isIOS ? 'iOS' : 'Android',
+    };
+
+    if (Platform.isAndroid) {
+      status['locationAlways'] = await Permission.locationAlways.isGranted;
+      status['locationWhenInUse'] = await Permission.locationWhenInUse.isGranted;
+      status['ignoreBatteryOptimizations'] = await Permission.ignoreBatteryOptimizations.isGranted;
+    }
+
+    return status;
   }
 
   /// Show foreground notification to keep service alive
