@@ -16,6 +16,7 @@ import '../../features/admin/screens/free_employee_location_screen.dart';
 import '../../features/requests/screens/requests_screen.dart' as req_screen;
 import '../../features/admin/screens/admin_requests_screen.dart';
 import '../../features/admin/screens/active_employees_by_store_screen.dart';
+import '../../features/admin/screens/vacation_employees_by_store_screen.dart';
 import '../../features/admin/screens/tasks_by_employee_screen.dart';
 import '../../features/admin/screens/employee_report_screen.dart';
 import '../models/user_model.dart';
@@ -38,6 +39,7 @@ class AppRoutes {
   static const String requests = '/requests';
   static const String adminRequests = '/admin-requests';
   static const String activeEmployeesByStore = '/active-employees-by-store';
+  static const String vacationEmployeesByStore = '/vacation-employees-by-store';
   static const String tasksByEmployee = '/tasks-by-employee';
   static const String employeeReport = '/employee-report';
   static const String freeEmployeeLocation = '/free-employee-location';
@@ -78,6 +80,8 @@ class AppRoutes {
         return _buildRoute(const AdminRequestsScreen());
       case activeEmployeesByStore:
         return _buildRoute(const ActiveEmployeesByStoreScreen());
+      case vacationEmployeesByStore:
+        return _buildRoute(const VacationEmployeesByStoreScreen());
       case tasksByEmployee:
         return _buildRoute(const TasksByEmployeeScreen());
       case employeeReport:

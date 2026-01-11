@@ -622,41 +622,50 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade100,
-                  borderRadius: BorderRadius.circular(10),
+        GestureDetector(
+          onTap: () => Navigator.pushNamed(context, AppRoutes.vacationEmployeesByStore),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.beach_access, color: Colors.blue.shade700),
                 ),
-                child: Icon(Icons.beach_access, color: Colors.blue.shade700),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                'الموظفون في إجازة اليوم',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: vacationEmployees.isEmpty ? Colors.grey : Colors.blue.shade700,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  '${vacationEmployees.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
+                const SizedBox(width: 10),
+                Text(
+                  'الموظفون في إجازة اليوم',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-              ),
-            ],
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: vacationEmployees.isEmpty ? Colors.grey : Colors.blue.shade700,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${vacationEmployees.length}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.blue.shade700,
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 15),
