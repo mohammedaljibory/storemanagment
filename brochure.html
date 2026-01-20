@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة المتاجر والموظفين - شركة الروابط الدولية</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            line-height: 1.8;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            background: white;
+            padding: 0;
+            page-break-after: always;
+        }
+
+        /* Cover Page */
+        .cover {
+            background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 50%, #1e3a5f 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 60px 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cover::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        .cover-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .logo-circle {
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 40px;
+            box-shadow: 0 20px 60px rgba(59, 130, 246, 0.4);
+        }
+
+        .logo-circle span {
+            font-size: 60px;
+        }
+
+        .cover h1 {
+            font-size: 42px;
+            font-weight: 900;
+            margin-bottom: 15px;
+            text-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .cover h2 {
+            font-size: 24px;
+            font-weight: 300;
+            opacity: 0.9;
+            margin-bottom: 50px;
+        }
+
+        .cover-features {
+            display: flex;
+            gap: 30px;
+            margin-top: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .cover-feature {
+            background: rgba(255,255,255,0.1);
+            padding: 20px 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .cover-feature span {
+            font-size: 30px;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .company-name {
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .company-name h3 {
+            font-size: 28px;
+            font-weight: 700;
+            color: #60a5fa;
+        }
+
+        .company-name p {
+            font-size: 18px;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        /* Content Pages */
+        .content-page {
+            padding: 40px 50px;
+        }
+
+        .page-header {
+            background: linear-gradient(135deg, #1e3a5f, #0f172a);
+            color: white;
+            padding: 25px 50px;
+            margin: -40px -50px 40px;
+        }
+
+        .page-header h2 {
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .page-header p {
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 35px;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1e3a5f;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #3b82f6;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .section-title span {
+            font-size: 28px;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+            border-radius: 15px;
+            padding: 25px;
+            border-right: 4px solid #3b82f6;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card.highlight {
+            background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+            border-right-color: #1d4ed8;
+        }
+
+        .feature-card.coming-soon {
+            background: linear-gradient(135deg, #fef3c7, #fde68a);
+            border-right-color: #f59e0b;
+        }
+
+        .feature-card h4 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e3a5f;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .feature-card p {
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.7;
+        }
+
+        .feature-card ul {
+            font-size: 13px;
+            color: #475569;
+            padding-right: 20px;
+            margin-top: 10px;
+        }
+
+        .feature-card ul li {
+            margin-bottom: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .badge-available {
+            background: #22c55e;
+            color: white;
+        }
+
+        .badge-coming {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .badge-new {
+            background: #8b5cf6;
+            color: white;
+        }
+
+        /* Stats Section */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #1e3a5f, #0f172a);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-card span {
+            font-size: 36px;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .stat-card h3 {
+            font-size: 28px;
+            font-weight: 900;
+            color: #60a5fa;
+        }
+
+        .stat-card p {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+
+        /* Comparison Table */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 13px;
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #1e3a5f, #0f172a);
+            color: white;
+            padding: 15px;
+            text-align: right;
+        }
+
+        .comparison-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .comparison-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .check {
+            color: #22c55e;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .cross {
+            color: #ef4444;
+            font-size: 18px;
+        }
+
+        /* Benefits Section */
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .benefit-card {
+            text-align: center;
+            padding: 30px 20px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+
+        .benefit-card span {
+            font-size: 50px;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        .benefit-card h4 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e3a5f;
+            margin-bottom: 10px;
+        }
+
+        .benefit-card p {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        /* Footer */
+        .page-footer {
+            position: absolute;
+            bottom: 20px;
+            left: 50px;
+            right: 50px;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        /* Workflow Section */
+        .workflow {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 15px;
+        }
+
+        .workflow-step {
+            text-align: center;
+            flex: 1;
+        }
+
+        .workflow-step .icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 10px;
+            font-size: 24px;
+        }
+
+        .workflow-step h5 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1e3a5f;
+        }
+
+        .workflow-step p {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .workflow-arrow {
+            font-size: 24px;
+            color: #3b82f6;
+        }
+
+        /* Print Styles */
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            .page {
+                margin: 0;
+                page-break-after: always;
+            }
+        }
+
+        .full-width {
+            grid-column: span 2;
+        }
+
+        .highlight-box {
+            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+            border: 2px solid #10b981;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+        }
+
+        .highlight-box h4 {
+            color: #059669;
+            font-size: 18px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .platforms {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin: 30px 0;
+        }
+
+        .platform {
+            text-align: center;
+            padding: 30px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            min-width: 150px;
+        }
+
+        .platform span {
+            font-size: 50px;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        .platform h4 {
+            font-size: 18px;
+            color: #1e3a5f;
+            margin-bottom: 5px;
+        }
+
+        .platform p {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .platform .status {
+            margin-top: 10px;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .platform .status.available {
+            background: #dcfce7;
+            color: #16a34a;
+        }
+
+        .platform .status.coming {
+            background: #fef3c7;
+            color: #d97706;
+        }
+    </style>
+</head>
+<body>
+    <!-- Cover Page -->
+    <div class="page cover">
+        <div class="cover-content">
+            <div class="logo-circle">
+                <span>🏪</span>
+            </div>
+            <h1>نظام إدارة المتاجر والموظفين</h1>
+            <h2>الحل الذكي والمتكامل لإدارة الحضور والانصراف</h2>
+
+            <div class="cover-features">
+                <div class="cover-feature">
+                    <span>📍</span>
+                    تتبع GPS
+                </div>
+                <div class="cover-feature">
+                    <span>⏰</span>
+                    حضور ذكي
+                </div>
+                <div class="cover-feature">
+                    <span>📊</span>
+                    تقارير شاملة
+                </div>
+                <div class="cover-feature">
+                    <span>💰</span>
+                    احتساب الرواتب
+                </div>
+            </div>
+
+            <div class="company-name">
+                <h3>شركة الروابط الدولية</h3>
+                <p>International Links Company</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 2: Overview -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>نظرة عامة على النظام</h2>
+            <p>حل متكامل يغطي جميع احتياجات إدارة الموظفين والفروع</p>
+        </div>
+
+        <p style="font-size: 15px; margin-bottom: 30px; line-height: 2;">
+            نظام إدارة المتاجر والموظفين هو منصة متكاملة مصممة خصيصاً للشركات التي تمتلك فروعاً ومتاجر متعددة.
+            يوفر النظام حلولاً ذكية لتتبع حضور وانصراف الموظفين باستخدام تقنية GPS، مع إمكانية إدارة الإجازات والمهام
+            واحتساب الرواتب بشكل آلي ودقيق. يتميز النظام بواجهة سهلة الاستخدام باللغة العربية ويعمل على جميع الأجهزة.
+        </p>
+
+        <div class="platforms">
+            <div class="platform">
+                <span>📱</span>
+                <h4>iOS</h4>
+                <p>آيفون وآيباد</p>
+                <div class="status available">متوفر الآن</div>
+            </div>
+            <div class="platform">
+                <span>🤖</span>
+                <h4>Android</h4>
+                <p>جميع الأجهزة</p>
+                <div class="status available">متوفر الآن</div>
+            </div>
+            <div class="platform">
+                <span>💻</span>
+                <h4>Web</h4>
+                <p>لوحة تحكم</p>
+                <div class="status coming">قريباً</div>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span>🏪</span>
+                <h3>∞</h3>
+                <p>فروع غير محدودة</p>
+            </div>
+            <div class="stat-card">
+                <span>👥</span>
+                <h3>∞</h3>
+                <p>موظفين غير محدود</p>
+            </div>
+            <div class="stat-card">
+                <span>📊</span>
+                <h3>24/7</h3>
+                <p>تقارير لحظية</p>
+            </div>
+            <div class="stat-card">
+                <span>🔒</span>
+                <h3>100%</h3>
+                <p>أمان البيانات</p>
+            </div>
+        </div>
+
+        <div class="highlight-box">
+            <h4>✨ لماذا نظامنا مختلف؟</h4>
+            <ul style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding-right: 20px;">
+                <li>لا حاجة لأجهزة بصمة باهظة الثمن</li>
+                <li>يعمل على هواتف الموظفين الشخصية</li>
+                <li>تحديثات لحظية لجميع المستخدمين</li>
+                <li>يعمل بدون إنترنت ويزامن تلقائياً</li>
+                <li>تقارير مفصلة قابلة للتصدير</li>
+                <li>دعم فني متواصل</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Page 3: Attendance Features -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>🕐 نظام الحضور والانصراف</h2>
+            <p>تتبع ذكي ودقيق باستخدام أحدث التقنيات</p>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>📍</span> تسجيل الحضور بالموقع الجغرافي (GPS)</h3>
+            <div class="feature-grid">
+                <div class="feature-card highlight">
+                    <h4>🎯 نطاق جغرافي محدد <span class="badge badge-available">متوفر</span></h4>
+                    <p>تحديد نطاق دائري حول كل متجر (بالأمتار). لا يمكن للموظف تسجيل الحضور إلا إذا كان داخل هذا النطاق.</p>
+                    <ul>
+                        <li>تحديد نطاق مختلف لكل متجر</li>
+                        <li>دقة تصل إلى 10 أمتار</li>
+                        <li>رسالة توضيحية عند الرفض</li>
+                    </ul>
+                </div>
+                <div class="feature-card highlight">
+                    <h4>📌 حفظ الإحداثيات <span class="badge badge-available">متوفر</span></h4>
+                    <p>حفظ موقع GPS الدقيق لكل عملية تسجيل دخول وخروج كدليل موثق.</p>
+                    <ul>
+                        <li>إحداثيات خط الطول والعرض</li>
+                        <li>وقت التسجيل بالثانية</li>
+                        <li>إمكانية المراجعة لاحقاً</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>👁️</span> مراقبة الموقع أثناء الدوام</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>🔔 تنبيهات فورية <span class="badge badge-available">متوفر</span></h4>
+                    <p>إشعار فوري للمدير إذا ابتعد الموظف عن المتجر أثناء الدوام.</p>
+                    <ul>
+                        <li>تنبيه عند الخروج من النطاق</li>
+                        <li>تسجيل مدة الابتعاد</li>
+                        <li>تقرير مفصل بالتحركات</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔋 يعمل في الخلفية <span class="badge badge-available">متوفر</span></h4>
+                    <p>المراقبة تستمر حتى عند إغلاق التطبيق أو قفل الشاشة.</p>
+                    <ul>
+                        <li>استهلاك بطارية منخفض</li>
+                        <li>لا يؤثر على أداء الهاتف</li>
+                        <li>يعمل على iOS و Android</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>⏱️</span> احتساب الوقت والتأخير</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>⏰ احتساب التأخير <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>احتساب دقائق التأخير تلقائياً</li>
+                        <li>فترة سماح قابلة للتعديل</li>
+                        <li>تقارير التأخير الشهرية</li>
+                        <li>خصم التأخير من الراتب (اختياري)</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🌙 الشفتات الليلية <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>دعم الشفتات عبر منتصف الليل</li>
+                        <li>احتساب صحيح للساعات</li>
+                        <li>مثال: 10 مساءً - 6 صباحاً</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="highlight-box" style="background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: #f59e0b;">
+            <h4 style="color: #d97706;">🏠 حل مشكلة سكن الموظف داخل المتجر <span class="badge badge-coming">قريباً</span></h4>
+            <p style="margin-bottom: 15px;">للمتاجر التي يسكن فيها الموظف في الطابق العلوي، نوفر حلولاً بديلة:</p>
+            <ul style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding-right: 20px;">
+                <li><strong>QR Code متغير:</strong> شاشة تعرض رمز يتغير كل 5 دقائق</li>
+                <li><strong>صورة سيلفي:</strong> التقاط صورة تظهر بيئة المتجر</li>
+                <li><strong>شريحة NFC:</strong> لمس الهاتف بشريحة داخل المتجر</li>
+                <li><strong>تحقق عشوائي:</strong> طلب تأكيد مفاجئ خلال الدوام</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Page 4: Employee & Store Management -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>👥 إدارة الموظفين والمتاجر</h2>
+            <p>تحكم كامل في الهيكل التنظيمي</p>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>👤</span> أنواع الموظفين</h3>
+            <div class="feature-grid">
+                <div class="feature-card highlight">
+                    <h4>🏪 موظف ثابت <span class="badge badge-available">متوفر</span></h4>
+                    <p>موظف مرتبط بمتجر وشفت محدد. يسجل حضوره من موقع المتجر فقط.</p>
+                    <ul>
+                        <li>متجر وشفت ثابت</li>
+                        <li>إمكانية النقل بين المتاجر</li>
+                        <li>تعيين شفت مؤقت عند الحاجة</li>
+                    </ul>
+                </div>
+                <div class="feature-card highlight">
+                    <h4>🚗 موظف حر (ميداني) <span class="badge badge-available">متوفر</span></h4>
+                    <p>للمناديب وفرق الصيانة. يسجل حضوره من أي مكان مع تتبع موقعه.</p>
+                    <ul>
+                        <li>تسجيل حضور من أي موقع</li>
+                        <li>تتبع GPS مستمر</li>
+                        <li>عرض موقعه على الخريطة للمدير</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>🏢</span> إدارة المتاجر والفروع</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>📍 إعدادات المتجر <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>اسم وعنوان المتجر</li>
+                        <li>تحديد الموقع على الخريطة</li>
+                        <li>نطاق السماح للحضور (بالأمتار)</li>
+                        <li>تعيين مدير للمتجر</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>⏰ إدارة الشفتات <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>شفتات متعددة لكل متجر</li>
+                        <li>وقت البداية والنهاية</li>
+                        <li>أيام العمل لكل شفت</li>
+                        <li>فترة السماح للتأخير</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>🔐</span> التسلسل الهرمي والصلاحيات <span class="badge badge-coming">قريباً</span></h3>
+            <div class="feature-grid">
+                <div class="feature-card coming-soon">
+                    <h4>📊 مستويات إدارية</h4>
+                    <p>هيكل تنظيمي متعدد المستويات:</p>
+                    <ul>
+                        <li><strong>مدير عام:</strong> صلاحيات كاملة</li>
+                        <li><strong>مدير منطقة:</strong> إدارة عدة فروع</li>
+                        <li><strong>مدير فرع:</strong> إدارة فرع واحد</li>
+                        <li><strong>مشرف:</strong> صلاحيات محدودة</li>
+                        <li><strong>موظف:</strong> صلاحيات أساسية</li>
+                    </ul>
+                </div>
+                <div class="feature-card coming-soon">
+                    <h4>✅ سير عمل الموافقات</h4>
+                    <p>نظام موافقات متسلسل:</p>
+                    <ul>
+                        <li>الموظف يقدم طلب إجازة</li>
+                        <li>المشرف يوافق مبدئياً</li>
+                        <li>مدير الفرع يوافق نهائياً</li>
+                        <li>تصعيد للمستوى الأعلى عند الرفض</li>
+                        <li>إشعارات لكل مرحلة</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="workflow">
+            <div class="workflow-step">
+                <div class="icon">👤</div>
+                <h5>الموظف</h5>
+                <p>يقدم الطلب</p>
+            </div>
+            <div class="workflow-arrow">←</div>
+            <div class="workflow-step">
+                <div class="icon">👨‍💼</div>
+                <h5>المشرف</h5>
+                <p>موافقة مبدئية</p>
+            </div>
+            <div class="workflow-arrow">←</div>
+            <div class="workflow-step">
+                <div class="icon">👔</div>
+                <h5>مدير الفرع</h5>
+                <p>موافقة نهائية</p>
+            </div>
+            <div class="workflow-arrow">←</div>
+            <div class="workflow-step">
+                <div class="icon">✅</div>
+                <h5>اعتماد</h5>
+                <p>تنفيذ الطلب</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 5: Requests & Vacations -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>📋 إدارة الطلبات والإجازات</h2>
+            <p>نظام متكامل لإدارة طلبات الموظفين</p>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>📝</span> أنواع الطلبات</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>🏖️ إجازة يوم كامل <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>طلب إجازة ليوم واحد</li>
+                        <li>طلب إجازة متعددة الأيام</li>
+                        <li>تحديد السبب (اختياري)</li>
+                        <li>منع الحضور في أيام الإجازة</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>⏱️ استئذان جزئي <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>استئذان بالساعات</li>
+                        <li>تحديد وقت البداية والنهاية</li>
+                        <li>خصم من ساعات العمل</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔄 تغيير الشفت <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>طلب تبديل الشفت</li>
+                        <li>موافقة المدير</li>
+                        <li>تحديث تلقائي للجدول</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔔 إشعارات فورية <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>إشعار للمدير عند تقديم طلب</li>
+                        <li>إشعار للموظف عند الرد</li>
+                        <li>تذكير بالطلبات المعلقة</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>📅</span> نظام الإجازات السنوية التراكمي <span class="badge badge-coming">قريباً</span></h3>
+            <div class="feature-grid">
+                <div class="feature-card coming-soon full-width">
+                    <h4>🗓️ احتساب الرصيد الشهري</h4>
+                    <p>نظام متكامل لإدارة رصيد الإجازات السنوية:</p>
+                    <ul style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                        <li><strong>رصيد شهري:</strong> مثال 2.5 يوم/شهر = 30 يوم/سنة</li>
+                        <li><strong>رصيد تراكمي:</strong> يتراكم تلقائياً كل شهر</li>
+                        <li><strong>خصم تلقائي:</strong> عند الموافقة على الإجازة</li>
+                        <li><strong>تنبيه النفاد:</strong> إشعار عند قرب انتهاء الرصيد</li>
+                        <li><strong>ترحيل الرصيد:</strong> نقل المتبقي للسنة التالية</li>
+                        <li><strong>تقارير الرصيد:</strong> عرض المستخدم والمتبقي</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>🔄</span> نظام البديل والأوفرتايم</h3>
+            <div class="feature-grid">
+                <div class="feature-card highlight">
+                    <h4>👥 تعيين موظف بديل <span class="badge badge-available">متوفر</span></h4>
+                    <p>عند غياب موظف، يمكن تعيين بديل له بسهولة:</p>
+                    <ul>
+                        <li>اختيار البديل من قائمة الموظفين</li>
+                        <li>تحديد المتجر والشفت</li>
+                        <li>احتساب ساعاته كأوفرتايم</li>
+                        <li>تقارير توضح البدائل</li>
+                    </ul>
+                </div>
+                <div class="feature-card highlight">
+                    <h4>⏰ أوفرتايم مستقل <span class="badge badge-available">متوفر</span></h4>
+                    <p>تعيين موظف لأوفرتايم بدون وجود غائب:</p>
+                    <ul>
+                        <li>تعيين من لوحة الإدارة</li>
+                        <li>اختيار أي متجر وشفت</li>
+                        <li>تتبع ساعات الأوفرتايم</li>
+                        <li>احتساب في الراتب</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 6: Tasks & Salaries -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>📋 المهام والرواتب</h2>
+            <p>إدارة المهام واحتساب الرواتب آلياً</p>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>✅</span> نظام إدارة المهام</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>📝 إنشاء المهام <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>تعيين لموظف أو أكثر</li>
+                        <li>تعيين لمتجر كامل</li>
+                        <li>تحديد الأولوية والمدة</li>
+                        <li>وصف تفصيلي للمهمة</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>📊 متابعة المهام <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>حالات: معلقة، قيد التنفيذ، مكتملة</li>
+                        <li>إرفاق صور عند الإنجاز</li>
+                        <li>موافقة المدير على الإنجاز</li>
+                        <li>تنبيه المهام المتأخرة</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>🔁 المهام المتكررة <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>مهام يومية متكررة</li>
+                        <li>مهام أسبوعية</li>
+                        <li>مهام شهرية</li>
+                        <li>إنشاء تلقائي للمهمة التالية</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>☕ إدارة الاستراحات <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>بدء وإنهاء الاستراحة</li>
+                        <li>خصم من ساعات العمل</li>
+                        <li>تتبع تجاوز الوقت المسموح</li>
+                        <li>تقارير الاستراحات</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>💰</span> نظام الرواتب <span class="badge badge-coming">قريباً</span></h3>
+            <div class="feature-grid">
+                <div class="feature-card coming-soon">
+                    <h4>💵 طرق احتساب الراتب</h4>
+                    <p>مرونة كاملة في احتساب الرواتب:</p>
+                    <ul>
+                        <li><strong>بالساعة:</strong> سعر الساعة × ساعات العمل</li>
+                        <li><strong>باليوم:</strong> سعر اليوم × أيام الحضور</li>
+                        <li><strong>شهري ثابت:</strong> راتب ثابت مع الخصومات</li>
+                    </ul>
+                </div>
+                <div class="feature-card coming-soon">
+                    <h4>➕ الإضافات والخصومات</h4>
+                    <ul>
+                        <li>إضافة الأوفرتايم تلقائياً</li>
+                        <li>خصم التأخير والغياب</li>
+                        <li>بدلات ومكافآت</li>
+                        <li>سلف وخصومات يدوية</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>🏢</span> مركز التكلفة (Cost Center) <span class="badge badge-coming">قريباً</span></h3>
+            <div class="feature-card coming-soon full-width" style="grid-column: span 2;">
+                <h4>📊 تحليل تكاليف الفروع</h4>
+                <p>نظام متكامل لتحليل تكلفة كل فرع:</p>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 15px;">
+                    <div style="background: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <span style="font-size: 30px; display: block;">💰</span>
+                        <strong>إجمالي رواتب الفرع</strong>
+                        <p style="font-size: 12px; color: #666;">مجموع رواتب جميع الموظفين</p>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <span style="font-size: 30px; display: block;">📈</span>
+                        <strong>مقارنة الفروع</strong>
+                        <p style="font-size: 12px; color: #666;">مقارنة تكاليف كل فرع</p>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <span style="font-size: 30px; display: block;">👤</span>
+                        <strong>تكلفة الموظف</strong>
+                        <p style="font-size: 12px; color: #666;">متوسط تكلفة الموظف الواحد</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 7: Reports -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>📊 التقارير والإحصائيات</h2>
+            <p>بيانات شاملة لاتخاذ قرارات أفضل</p>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>📱</span> لوحة التحكم الرئيسية</h3>
+            <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+                <div class="stat-card" style="padding: 15px;">
+                    <span style="font-size: 24px;">👥</span>
+                    <h3 style="font-size: 20px;">الحاضرون</h3>
+                    <p>الآن في العمل</p>
+                </div>
+                <div class="stat-card" style="padding: 15px;">
+                    <span style="font-size: 24px;">⏰</span>
+                    <h3 style="font-size: 20px;">المتأخرون</h3>
+                    <p>تأخروا اليوم</p>
+                </div>
+                <div class="stat-card" style="padding: 15px;">
+                    <span style="font-size: 24px;">🏖️</span>
+                    <h3 style="font-size: 20px;">المجازون</h3>
+                    <p>في إجازة اليوم</p>
+                </div>
+                <div class="stat-card" style="padding: 15px;">
+                    <span style="font-size: 24px;">✅</span>
+                    <h3 style="font-size: 20px;">نسبة الحضور</h3>
+                    <p>في الوقت</p>
+                </div>
+                <div class="stat-card" style="padding: 15px;">
+                    <span style="font-size: 24px;">🕐</span>
+                    <h3 style="font-size: 20px;">الساعات</h3>
+                    <p>إجمالي اليوم</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>👤</span> تقارير الموظفين</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>📅 تقرير الحضور الشهري <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>أيام الحضور والغياب</li>
+                        <li>إجمالي دقائق التأخير</li>
+                        <li>متوسط ساعات العمل اليومية</li>
+                        <li>نسبة الالتزام بالمواعيد</li>
+                    </ul>
+                </div>
+                <div class="feature-card">
+                    <h4>✅ تقرير المهام <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>المهام المنجزة</li>
+                        <li>المهام المعلقة</li>
+                        <li>المهام المتأخرة</li>
+                        <li>نسبة الإنجاز</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h3 class="section-title"><span>🏪</span> تقارير المتاجر</h3>
+            <div class="feature-grid">
+                <div class="feature-card highlight">
+                    <h4>📊 إحصائيات الفرع <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>الموظفين النشطين الآن</li>
+                        <li>المجازين حسب المتجر</li>
+                        <li>إجمالي ساعات العمل</li>
+                        <li>نسبة الحضور للفرع</li>
+                    </ul>
+                </div>
+                <div class="feature-card highlight">
+                    <h4>📈 مقارنة الفروع <span class="badge badge-available">متوفر</span></h4>
+                    <ul>
+                        <li>أفضل فرع بالالتزام</li>
+                        <li>مقارنة ساعات العمل</li>
+                        <li>معدل التأخير لكل فرع</li>
+                        <li>تصنيف الفروع</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="highlight-box">
+            <h4>📤 تصدير التقارير</h4>
+            <div style="display: flex; gap: 30px; margin-top: 15px;">
+                <div style="text-align: center;">
+                    <span style="font-size: 40px; display: block;">📄</span>
+                    <strong>PDF</strong>
+                    <p style="font-size: 12px;">للطباعة والأرشفة</p>
+                </div>
+                <div style="text-align: center;">
+                    <span style="font-size: 40px; display: block;">📊</span>
+                    <strong>Excel</strong>
+                    <p style="font-size: 12px;">للتحليل المتقدم</p>
+                </div>
+                <div style="text-align: center;">
+                    <span style="font-size: 40px; display: block;">📧</span>
+                    <strong>Email</strong>
+                    <p style="font-size: 12px;">إرسال تلقائي</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 8: Comparison & Benefits -->
+    <div class="page content-page">
+        <div class="page-header">
+            <h2>⚖️ مقارنة مع الأنظمة التقليدية</h2>
+            <p>لماذا نظامنا هو الخيار الأفضل؟</p>
+        </div>
+
+        <table class="comparison-table">
+            <thead>
+                <tr>
+                    <th style="width: 40%;">الميزة</th>
+                    <th style="width: 30%;">نظامنا</th>
+                    <th style="width: 30%;">أجهزة البصمة التقليدية</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>تكلفة الإعداد</td>
+                    <td><span class="check">✓</span> منخفضة (لا أجهزة)</td>
+                    <td><span class="cross">✗</span> عالية (جهاز لكل فرع)</td>
+                </tr>
+                <tr>
+                    <td>الصيانة</td>
+                    <td><span class="check">✓</span> لا صيانة</td>
+                    <td><span class="cross">✗</span> صيانة دورية مكلفة</td>
+                </tr>
+                <tr>
+                    <td>التوسع</td>
+                    <td><span class="check">✓</span> فوري بدون تكلفة</td>
+                    <td><span class="cross">✗</span> شراء جهاز جديد</td>
+                </tr>
+                <tr>
+                    <td>التقارير</td>
+                    <td><span class="check">✓</span> لحظية ومفصلة</td>
+                    <td><span class="cross">✗</span> محدودة ومتأخرة</td>
+                </tr>
+                <tr>
+                    <td>تتبع الموقع</td>
+                    <td><span class="check">✓</span> GPS دقيق</td>
+                    <td><span class="cross">✗</span> غير متوفر</td>
+                </tr>
+                <tr>
+                    <td>مراقبة أثناء الدوام</td>
+                    <td><span class="check">✓</span> مستمرة</td>
+                    <td><span class="cross">✗</span> غير متوفر</td>
+                </tr>
+                <tr>
+                    <td>إدارة الطلبات</td>
+                    <td><span class="check">✓</span> إلكترونية كاملة</td>
+                    <td><span class="cross">✗</span> يدوية ورقية</td>
+                </tr>
+                <tr>
+                    <td>إدارة المهام</td>
+                    <td><span class="check">✓</span> متكاملة</td>
+                    <td><span class="cross">✗</span> غير متوفر</td>
+                </tr>
+                <tr>
+                    <td>الوصول عن بعد</td>
+                    <td><span class="check">✓</span> من أي مكان</td>
+                    <td><span class="cross">✗</span> من الجهاز فقط</td>
+                </tr>
+                <tr>
+                    <td>التحديثات</td>
+                    <td><span class="check">✓</span> تلقائية ومجانية</td>
+                    <td><span class="cross">✗</span> تحتاج فني</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="section" style="margin-top: 40px;">
+            <h3 class="section-title"><span>🎯</span> الفوائد الرئيسية</h3>
+            <div class="benefits-grid">
+                <div class="benefit-card">
+                    <span>💰</span>
+                    <h4>توفير التكاليف</h4>
+                    <p>لا أجهزة، لا صيانة، لا تكاليف خفية</p>
+                </div>
+                <div class="benefit-card">
+                    <span>⏱️</span>
+                    <h4>توفير الوقت</h4>
+                    <p>أتمتة كاملة للعمليات اليدوية</p>
+                </div>
+                <div class="benefit-card">
+                    <span>🎯</span>
+                    <h4>دقة عالية</h4>
+                    <p>لا أخطاء بشرية في الحسابات</p>
+                </div>
+                <div class="benefit-card">
+                    <span>👁️</span>
+                    <h4>شفافية</h4>
+                    <p>الموظف يرى سجله كاملاً</p>
+                </div>
+                <div class="benefit-card">
+                    <span>📱</span>
+                    <h4>سهولة</h4>
+                    <p>واجهة بسيطة لا تحتاج تدريب</p>
+                </div>
+                <div class="benefit-card">
+                    <span>🔒</span>
+                    <h4>أمان</h4>
+                    <p>بيانات مشفرة ومحمية</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 9: Contact -->
+    <div class="page cover" style="justify-content: center;">
+        <div class="cover-content" style="text-align: center;">
+            <div class="logo-circle" style="margin-bottom: 50px;">
+                <span>🤝</span>
+            </div>
+
+            <h1 style="font-size: 36px; margin-bottom: 20px;">ابدأ الآن</h1>
+            <h2 style="font-size: 20px; font-weight: 400; margin-bottom: 50px;">
+                انتقل إلى نظام إدارة حديث وذكي
+            </h2>
+
+            <div style="background: rgba(255,255,255,0.1); border-radius: 20px; padding: 40px; margin: 30px 0;">
+                <h3 style="font-size: 24px; margin-bottom: 30px;">نقدم لكم</h3>
+                <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap;">
+                    <div style="text-align: center;">
+                        <span style="font-size: 40px; display: block; margin-bottom: 10px;">🎁</span>
+                        <strong>تجربة مجانية</strong>
+                        <p style="font-size: 14px; opacity: 0.8;">14 يوم بدون التزام</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 40px; display: block; margin-bottom: 10px;">🛠️</span>
+                        <strong>إعداد مجاني</strong>
+                        <p style="font-size: 14px; opacity: 0.8;">نساعدك في البداية</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 40px; display: block; margin-bottom: 10px;">📞</span>
+                        <strong>دعم فني</strong>
+                        <p style="font-size: 14px; opacity: 0.8;">متاح على مدار الساعة</p>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 40px; display: block; margin-bottom: 10px;">📚</span>
+                        <strong>تدريب مجاني</strong>
+                        <p style="font-size: 14px; opacity: 0.8;">لفريقك بالكامل</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="company-name" style="margin-top: 50px; border-top: none;">
+                <h3 style="font-size: 32px;">شركة الروابط الدولية</h3>
+                <p style="font-size: 20px; margin-top: 10px;">International Links Company</p>
+            </div>
+
+            <p style="margin-top: 50px; font-size: 14px; opacity: 0.6;">
+                © 2025 جميع الحقوق محفوظة
+            </p>
+        </div>
+    </div>
+</body>
+</html>
