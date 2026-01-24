@@ -460,12 +460,20 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
             r.targetDate.isBefore(_endDate.add(const Duration(days: 1)));
       }).toList();
 
+      // Filter time-off requests (زمنيات)
+      final timeOffs = requestProvider.approvedRequests.where((r) {
+        return r.type == RequestType.timeOff &&
+            r.targetDate.isAfter(_startDate.subtract(const Duration(days: 1))) &&
+            r.targetDate.isBefore(_endDate.add(const Duration(days: 1)));
+      }).toList();
+
       // Generate PDF
       final pdf = await _buildPdf(
         employee: _selectedEmployee!,
         attendance: _includeAttendance ? attendance : [],
         tasks: _includeTasks ? tasks : [],
         dayOffs: _includeDayOffs ? dayOffs : [],
+        timeOffs: timeOffs,
       );
 
       // Share/Print PDF
@@ -492,6 +500,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
     required List<AttendanceModel> attendance,
     required List<TaskModel> tasks,
     required List<RequestModel> dayOffs,
+    List<RequestModel> timeOffs = const [],
   }) async {
     final pdf = pw.Document();
     final dateFormat = intl.DateFormat('yyyy/MM/dd');
@@ -535,6 +544,15 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
       ));
     }
 
+    // Add time-off records (زمنيات)
+    for (final t in timeOffs) {
+      allDays.add(_DayRecord(
+        date: DateTime(t.targetDate.year, t.targetDate.month, t.targetDate.day),
+        type: _DayType.timeOff,
+        timeOff: t,
+      ));
+    }
+
     // Sort by date (newest first)
     allDays.sort((a, b) => b.date.compareTo(a.date));
 
@@ -561,7 +579,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
             widgets.add(pw.SizedBox(height: 10));
             widgets.add(_buildCombinedDaysTable(allDays, dateFormat, timeFormat, arabicFont));
             widgets.add(pw.SizedBox(height: 20));
-            widgets.add(_buildCombinedSummary(regularAttendance, dayOffs, substituteHours, arabicFont, arabicBoldFont));
+            widgets.add(_buildCombinedSummary(regularAttendance, dayOffs, timeOffs, substituteHours, arabicFont, arabicBoldFont));
             widgets.add(pw.SizedBox(height: 30));
           }
 
@@ -633,6 +651,35 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
                 _buildTableCell(day.vacation?.reason ?? 'إجازة معتمدة', font, color: PdfColors.orange),
               ],
             );
+          } else if (day.type == _DayType.timeOff) {
+            // Time-off (زمنية)
+            final t = day.timeOff!;
+            String statusText = t.timeOffReturnStatusText;
+            PdfColor statusColor;
+            switch (t.timeOffReturnStatus) {
+              case TimeOffReturnStatus.returned:
+                statusColor = PdfColors.green;
+                break;
+              case TimeOffReturnStatus.late:
+                statusColor = PdfColors.orange;
+                break;
+              case TimeOffReturnStatus.blocked:
+                statusColor = PdfColors.red;
+                break;
+              default:
+                statusColor = PdfColors.purple;
+            }
+            return pw.TableRow(
+              decoration: const pw.BoxDecoration(color: PdfColors.purple50),
+              children: [
+                _buildTableCell(dateFormat.format(day.date), font),
+                _buildTableCell('زمنية', font, color: PdfColors.purple),
+                _buildTableCell(t.startTime ?? '--', font),
+                _buildTableCell(t.endTime ?? '--', font),
+                _buildTableCell(t.durationText, font),
+                _buildTableCell(statusText, font, color: statusColor),
+              ],
+            );
           } else if (day.type == _DayType.substitute) {
             // Substitute shift (overtime)
             final a = day.attendance!;
@@ -677,6 +724,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
   pw.Widget _buildCombinedSummary(
     List<AttendanceModel> attendance,
     List<RequestModel> dayOffs,
+    List<RequestModel> timeOffs,
     double substituteHours,
     pw.Font font,
     pw.Font boldFont,
@@ -686,6 +734,13 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
     final lateDays = attendance.where((a) => a.isLate).length;
     final totalHours = attendance.fold<double>(0, (sum, a) => sum + (a.totalHours ?? 0));
     final totalLateMinutes = attendance.fold<int>(0, (sum, a) => sum + a.lateMinutes);
+
+    // Time-off statistics
+    final totalTimeOffs = timeOffs.length;
+    final returnedOnTime = timeOffs.where((t) => t.timeOffReturnStatus == TimeOffReturnStatus.returned).length;
+    final returnedLate = timeOffs.where((t) => t.timeOffReturnStatus == TimeOffReturnStatus.late).length;
+    final blockedTimeOffs = timeOffs.where((t) => t.timeOffReturnStatus == TimeOffReturnStatus.blocked).length;
+    final totalTimeOffMinutes = timeOffs.fold<int>(0, (sum, t) => sum + (t.durationMinutes ?? 0));
 
     return pw.Container(
       padding: const pw.EdgeInsets.all(10),
@@ -713,6 +768,22 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
               mainAxisAlignment: pw.MainAxisAlignment.center,
               children: [
                 _buildSummaryItem('ساعات أوفرتايم (بديل)', substituteHours.toStringAsFixed(1), font, boldFont, color: PdfColors.green800),
+              ],
+            ),
+          ],
+          if (totalTimeOffs > 0) ...[
+            pw.SizedBox(height: 10),
+            pw.Divider(color: PdfColors.grey300),
+            pw.SizedBox(height: 10),
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+              children: [
+                _buildSummaryItem('الزمنيات', '$totalTimeOffs', font, boldFont, color: PdfColors.purple),
+                _buildSummaryItem('عاد في الوقت', '$returnedOnTime', font, boldFont, color: PdfColors.green),
+                _buildSummaryItem('عاد متأخر', '$returnedLate', font, boldFont, color: PdfColors.orange),
+                if (blockedTimeOffs > 0)
+                  _buildSummaryItem('محظور', '$blockedTimeOffs', font, boldFont, color: PdfColors.red),
+                _buildSummaryItem('إجمالي الدقائق', '$totalTimeOffMinutes', font, boldFont),
               ],
             ),
           ],
@@ -964,21 +1035,24 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
 }
 
 /// Enum for day record type
-enum _DayType { attendance, vacation, substitute }
+enum _DayType { attendance, vacation, substitute, timeOff }
 
-/// Helper class to hold a day record (either attendance, vacation, or substitute)
+/// Helper class to hold a day record (either attendance, vacation, substitute, or timeOff)
 class _DayRecord {
   final DateTime date;
   final _DayType type;
   final AttendanceModel? attendance;
   final RequestModel? vacation;
+  final RequestModel? timeOff;
 
   _DayRecord({
     required this.date,
     required this.type,
     this.attendance,
     this.vacation,
+    this.timeOff,
   });
 
   bool get isSubstitute => type == _DayType.substitute;
+  bool get isTimeOff => type == _DayType.timeOff;
 }

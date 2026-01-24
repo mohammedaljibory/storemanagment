@@ -13,6 +13,15 @@ enum RequestStatus {
   cancelled, // ملغي
 }
 
+/// Time-off return status (for tracking employee return after time-off)
+enum TimeOffReturnStatus {
+  pending,   // لم يبدأ بعد
+  active,    // الزمنية جارية
+  returned,  // عاد في الوقت
+  late,      // عاد متأخر (ضمن فترة السماح)
+  blocked,   // حُظر من الدخول (تجاوز فترة السماح)
+}
+
 class RequestModel {
   final String id;
   final String employeeId;
@@ -37,6 +46,13 @@ class RequestModel {
   final String? newShiftName;      // اسم الشفت الجديد
   final bool isActive;
 
+  // ============ TIME-OFF MONITORING FIELDS ============
+  final bool isBeforeShift;        // هل الزمنية قبل بداية الدوام؟
+  final String? expectedReturnTime; // وقت العودة المتوقع (مثل "10:00")
+  final int graceMinutes;          // فترة السماح بالدقائق (افتراضي 15)
+  final TimeOffReturnStatus timeOffReturnStatus; // حالة العودة من الزمنية
+  final DateTime? actualReturnTime; // وقت العودة الفعلي
+
   RequestModel({
     required this.id,
     required this.employeeId,
@@ -60,6 +76,11 @@ class RequestModel {
     this.newShiftId,
     this.newShiftName,
     this.isActive = true,
+    this.isBeforeShift = false,
+    this.expectedReturnTime,
+    this.graceMinutes = 15,
+    this.timeOffReturnStatus = TimeOffReturnStatus.pending,
+    this.actualReturnTime,
   });
 
   factory RequestModel.fromJson(Map<String, dynamic> json) {
@@ -94,6 +115,16 @@ class RequestModel {
       newShiftId: json['newShiftId'] as String?,
       newShiftName: json['newShiftName'] as String?,
       isActive: json['isActive'] as bool? ?? true,
+      isBeforeShift: json['isBeforeShift'] as bool? ?? false,
+      expectedReturnTime: json['expectedReturnTime'] as String?,
+      graceMinutes: json['graceMinutes'] as int? ?? 15,
+      timeOffReturnStatus: TimeOffReturnStatus.values.firstWhere(
+        (s) => s.toString() == 'TimeOffReturnStatus.${json['timeOffReturnStatus']}',
+        orElse: () => TimeOffReturnStatus.pending,
+      ),
+      actualReturnTime: json['actualReturnTime'] != null
+          ? DateTime.parse(json['actualReturnTime'] as String)
+          : null,
     );
   }
 
@@ -121,6 +152,11 @@ class RequestModel {
       'newShiftId': newShiftId,
       'newShiftName': newShiftName,
       'isActive': isActive,
+      'isBeforeShift': isBeforeShift,
+      'expectedReturnTime': expectedReturnTime,
+      'graceMinutes': graceMinutes,
+      'timeOffReturnStatus': timeOffReturnStatus.toString().split('.').last,
+      'actualReturnTime': actualReturnTime?.toIso8601String(),
     };
   }
 
@@ -147,6 +183,11 @@ class RequestModel {
     String? newShiftId,
     String? newShiftName,
     bool? isActive,
+    bool? isBeforeShift,
+    String? expectedReturnTime,
+    int? graceMinutes,
+    TimeOffReturnStatus? timeOffReturnStatus,
+    DateTime? actualReturnTime,
   }) {
     return RequestModel(
       id: id ?? this.id,
@@ -171,6 +212,11 @@ class RequestModel {
       newShiftId: newShiftId ?? this.newShiftId,
       newShiftName: newShiftName ?? this.newShiftName,
       isActive: isActive ?? this.isActive,
+      isBeforeShift: isBeforeShift ?? this.isBeforeShift,
+      expectedReturnTime: expectedReturnTime ?? this.expectedReturnTime,
+      graceMinutes: graceMinutes ?? this.graceMinutes,
+      timeOffReturnStatus: timeOffReturnStatus ?? this.timeOffReturnStatus,
+      actualReturnTime: actualReturnTime ?? this.actualReturnTime,
     );
   }
 
@@ -289,5 +335,83 @@ class RequestModel {
     final endStr = '${endDate!.day} ${months[endDate!.month - 1]} ${endDate!.year}';
 
     return '$startStr - $endStr ($totalDays أيام)';
+  }
+
+  // ============ TIME-OFF HELPERS ============
+
+  /// Get time-off return status text in Arabic
+  String get timeOffReturnStatusText {
+    switch (timeOffReturnStatus) {
+      case TimeOffReturnStatus.pending:
+        return 'لم يبدأ';
+      case TimeOffReturnStatus.active:
+        return 'جارية';
+      case TimeOffReturnStatus.returned:
+        return 'عاد في الوقت';
+      case TimeOffReturnStatus.late:
+        return 'عاد متأخر';
+      case TimeOffReturnStatus.blocked:
+        return 'محظور';
+    }
+  }
+
+  /// Check if this is a time-off request
+  bool get isTimeOff => type == RequestType.timeOff;
+
+  /// Check if employee is blocked from check-in
+  bool get isBlocked => timeOffReturnStatus == TimeOffReturnStatus.blocked;
+
+  /// Check if time-off is currently active
+  bool get isTimeOffActive => timeOffReturnStatus == TimeOffReturnStatus.active;
+
+  /// Get expected return DateTime (combining targetDate with expectedReturnTime)
+  DateTime? get expectedReturnDateTime {
+    if (expectedReturnTime == null) return null;
+    final parts = expectedReturnTime!.split(':');
+    if (parts.length != 2) return null;
+    return DateTime(
+      targetDate.year,
+      targetDate.month,
+      targetDate.day,
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+    );
+  }
+
+  /// Get deadline DateTime (expected return + grace minutes)
+  DateTime? get returnDeadline {
+    final returnTime = expectedReturnDateTime;
+    if (returnTime == null) return null;
+    return returnTime.add(Duration(minutes: graceMinutes));
+  }
+
+  /// Check if return deadline has passed
+  bool get isReturnDeadlinePassed {
+    final deadline = returnDeadline;
+    if (deadline == null) return false;
+    return DateTime.now().isAfter(deadline);
+  }
+
+  /// Check if expected return time has passed (but still within grace period)
+  bool get isExpectedReturnTimePassed {
+    final returnTime = expectedReturnDateTime;
+    if (returnTime == null) return false;
+    return DateTime.now().isAfter(returnTime);
+  }
+
+  /// Get minutes late (negative if not late yet)
+  int get minutesLate {
+    final returnTime = expectedReturnDateTime;
+    if (returnTime == null) return 0;
+    final diff = DateTime.now().difference(returnTime).inMinutes;
+    return diff > 0 ? diff : 0;
+  }
+
+  /// Get remaining minutes until deadline
+  int get remainingMinutesUntilDeadline {
+    final deadline = returnDeadline;
+    if (deadline == null) return 0;
+    final diff = deadline.difference(DateTime.now()).inMinutes;
+    return diff > 0 ? diff : 0;
   }
 }

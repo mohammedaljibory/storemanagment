@@ -496,6 +496,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
     DateTime startDate = DateTime.now().add(const Duration(days: 1));
     DateTime? endDate; // For multi-day vacation
     bool isMultiDay = false;
+    bool isBeforeShift = false; // Time-off before starting work
     TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
     TimeOfDay endTime = const TimeOfDay(hour: 12, minute: 0);
     final reasonController = TextEditingController();
@@ -810,6 +811,73 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                         ),
                       ],
                     ),
+                    const SizedBox(height: 15),
+
+                    // Before Shift Toggle
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isBeforeShift
+                            ? Colors.orange.withOpacity(0.1)
+                            : Colors.grey.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isBeforeShift ? Colors.orange : Colors.grey.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                isBeforeShift ? Icons.wb_sunny : Icons.work_history,
+                                color: isBeforeShift ? Colors.orange : Colors.grey,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'زمنية قبل بداية الدوام',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ),
+                              Switch(
+                                value: isBeforeShift,
+                                onChanged: (value) {
+                                  setState(() {
+                                    isBeforeShift = value;
+                                  });
+                                },
+                                activeColor: Colors.orange,
+                              ),
+                            ],
+                          ),
+                          if (isBeforeShift) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'يجب العودة قبل الساعة ${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}\nفترة السماح: 15 دقيقة',
+                                      style: const TextStyle(fontSize: 11, color: Colors.orange),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 20),
                   ],
 
@@ -897,6 +965,10 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     endTime: endTimeStr,
                     durationMinutes: durationMinutes,
                     reason: reasonController.text.trim(),
+                    // Time-off monitoring fields
+                    isBeforeShift: selectedType == RequestType.timeOff ? isBeforeShift : false,
+                    expectedReturnTime: selectedType == RequestType.timeOff ? endTimeStr : null,
+                    graceMinutes: 15,
                   );
 
                   final requestProvider = context.read<RequestProvider>();

@@ -208,12 +208,21 @@ class RequestProvider extends ChangeNotifier {
           endTime: approvedEndTime ?? _requests[index].endTime,
         );
 
+        // Build notification body
+        String notificationBody = 'تمت الموافقة على ${_requests[index].typeText}';
+
+        // Add time-off specific info
+        if (_requests[index].type == RequestType.timeOff && _requests[index].expectedReturnTime != null) {
+          notificationBody += '\nيجب العودة قبل الساعة ${_requests[index].expectedReturnTime}';
+          notificationBody += '\nفترة السماح: ${_requests[index].graceMinutes} دقيقة';
+        }
+
         // Save notification to Firestore for in-app notification list
         // skipPush: true because Cloud Function (onRequestUpdated) already sends push
         await _firestore.collection('notifications').add({
           'type': 'request_approved',
           'title': 'تمت الموافقة على طلبك ✅',
-          'body': 'تمت الموافقة على ${_requests[index].typeText}',
+          'body': notificationBody,
           'employeeId': _requests[index].employeeId,
           'employeeName': _requests[index].employeeName,
           'requestId': requestId,
@@ -223,6 +232,11 @@ class RequestProvider extends ChangeNotifier {
           'forEmployee': true,
           'targetUserId': _requests[index].employeeId,
           'skipPush': true, // Cloud Function onRequestUpdated handles push
+          // Time-off specific fields
+          if (_requests[index].type == RequestType.timeOff) ...{
+            'expectedReturnTime': _requests[index].expectedReturnTime,
+            'graceMinutes': _requests[index].graceMinutes,
+          },
         });
 
         // Update vacation balance if this is a vacation request

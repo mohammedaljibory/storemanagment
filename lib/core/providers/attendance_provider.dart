@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import '../services/notification_service.dart';
 import '../services/location_monitor_service.dart';
 import '../services/break_service.dart';
+import '../services/time_off_monitor_service.dart';
 import '../models/request_model.dart';
 
 class AttendanceProvider extends ChangeNotifier {
@@ -311,6 +312,27 @@ class AttendanceProvider extends ChangeNotifier {
         _errorMessage = 'أنت في إجازة اليوم!\n${vacationRequest.dateRangeText}';
         notifyListeners();
         return false;
+      }
+
+      // 1.5. Check if employee is blocked due to time-off (زمنية)
+      final timeOffStatus = await TimeOffMonitorService.checkTimeOffBlockStatus(userId);
+      if (timeOffStatus != null) {
+        if (timeOffStatus['blocked'] == true) {
+          _isLoading = false;
+          _errorMessage = timeOffStatus['reason'] ?? 'تم حظر تسجيل الدخول بسبب الزمنية';
+          notifyListeners();
+          return false;
+        }
+
+        // Employee is returning from time-off (within grace period)
+        if (timeOffStatus['late'] == true) {
+          final minutesLate = timeOffStatus['minutesLate'] ?? 0;
+          final remainingGrace = timeOffStatus['remainingGraceMinutes'] ?? 0;
+          print('⏰ Employee returning from time-off: $minutesLate min late, $remainingGrace min grace remaining');
+
+          // Mark as returned from time-off
+          await TimeOffMonitorService.markAsReturned();
+        }
       }
 
       // 2. Validate work day (skip for secondary stores)
