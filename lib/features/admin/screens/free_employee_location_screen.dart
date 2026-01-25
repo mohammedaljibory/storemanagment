@@ -532,12 +532,91 @@ class _FreeEmployeeLocationScreenState extends State<FreeEmployeeLocationScreen>
   }
 
   Widget _buildInfoPanel(BuildContext context) {
+    // Check if location is stale (more than 5 minutes old)
+    final isStale = _lastUpdate != null &&
+        DateTime.now().difference(_lastUpdate!).inMinutes > 5;
+
     return GlassContainer(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Stale location warning
+          if (isStale) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.errorColor.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber, color: AppTheme.errorColor, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'انقطع التتبع!',
+                          style: TextStyle(
+                            color: AppTheme.errorColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          'آخر تحديث منذ ${DateTime.now().difference(_lastUpdate!).inMinutes} دقيقة',
+                          style: TextStyle(
+                            color: AppTheme.errorColor.withOpacity(0.8),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Tracking status indicator
+          if (!isStale && _lastUpdate != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppTheme.successColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: AppTheme.successColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'التتبع نشط',
+                    style: TextStyle(
+                      color: AppTheme.successColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
           Row(
             children: [
               _buildInfoItem(
@@ -561,11 +640,18 @@ class _FreeEmployeeLocationScreenState extends State<FreeEmployeeLocationScreen>
             const SizedBox(height: 12),
             Row(
               children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey),
+                Icon(
+                  Icons.access_time,
+                  size: 16,
+                  color: isStale ? AppTheme.errorColor : Colors.grey,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'آخر تحديث: ${_formatDateTime(_lastUpdate!)}',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: isStale ? AppTheme.errorColor : Colors.grey,
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
