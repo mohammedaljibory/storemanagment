@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
@@ -73,7 +72,7 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
                     ),
                   ],
                 ),
-              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+              ),
 
               // Store List
               Expanded(
@@ -126,10 +125,7 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
         icon: const Icon(Icons.add),
         label: const Text('إضافة متجر'),
         backgroundColor: AppTheme.primaryColor,
-      ).animate().fadeIn(delay: 600.ms).scale(
-            begin: const Offset(0.8, 0.8),
-            end: const Offset(1, 1),
-          ),
+      ),
     );
   }
 
@@ -264,9 +260,7 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildInfoChip(IconData icon, String label, Color color) {

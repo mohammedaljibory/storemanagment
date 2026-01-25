@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -96,7 +95,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                     const SizedBox(width: 48),
                   ],
                 ),
-              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+              ),
 
               // Form
               Expanded(
@@ -123,7 +122,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               return null;
                             },
                           ),
-                        ).animate().fadeIn(delay: 100.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 16),
 
@@ -145,7 +144,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               return null;
                             },
                           ),
-                        ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 16),
 
@@ -181,7 +180,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               ),
                             );
                           },
-                        ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 16),
 
@@ -260,7 +259,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                 ),
                               );
                             },
-                          ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
+                          ),
 
                         const SizedBox(height: 16),
 
@@ -300,7 +299,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               ),
                             ],
                           ),
-                        ).animate().fadeIn(delay: 500.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 16),
 
@@ -334,7 +333,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               ),
                             ],
                           ),
-                        ).animate().fadeIn(delay: 600.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 16),
 
@@ -354,7 +353,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               ),
                             ),
                           ),
-                        ).animate().fadeIn(delay: 700.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 16),
 
@@ -507,7 +506,7 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               ],
                             ],
                           ),
-                        ).animate().fadeIn(delay: 800.ms, duration: 600.ms),
+                        ),
 
                         const SizedBox(height: 32),
 
@@ -539,8 +538,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                               );
                             },
                           ),
-                        ).animate().fadeIn(delay: 900.ms, duration: 600.ms),
-                        
+                        ),
+
                         const SizedBox(height: 20),
                       ],
                     ),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/request_provider.dart';
@@ -104,7 +103,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     ),
                   ],
                 ),
-              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+              ),
 
               // Vacation Balance Card
               Consumer<AuthProvider>(
@@ -197,7 +196,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                         ],
                       ),
                     ),
-                  ).animate().fadeIn(delay: 300.ms, duration: 600.ms).slideY(begin: 0.1, end: 0);
+                  );
                 },
               ),
 
@@ -248,10 +247,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
         icon: const Icon(Icons.add),
         label: const Text('طلب جديد'),
         backgroundColor: AppTheme.primaryColor,
-      ).animate().fadeIn(delay: 600.ms).scale(
-            begin: const Offset(0.8, 0.8),
-            end: const Offset(1, 1),
-          ),
+      ),
     );
   }
 
@@ -518,9 +514,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   void _showCreateRequestDialog(BuildContext context) {

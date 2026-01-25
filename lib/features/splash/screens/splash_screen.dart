@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/routes/app_routes.dart';
@@ -47,7 +46,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -80,15 +79,7 @@ class _SplashScreenState extends State<SplashScreen> {
                   size: 60,
                   color: AppTheme.primaryColor,
                 ),
-              )
-                  .animate()
-                  .fadeIn(duration: 1000.ms)
-                  .scale(
-                    begin: const Offset(0.5, 0.5),
-                    end: const Offset(1, 1),
-                    duration: 1000.ms,
-                    curve: Curves.elasticOut,
-                  ),
+              ),
               const SizedBox(height: 30),
               Text(
                 'إدارة المتجر',
@@ -96,36 +87,18 @@ class _SplashScreenState extends State<SplashScreen> {
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
-              )
-                  .animate()
-                  .fadeIn(delay: 500.ms, duration: 800.ms)
-                  .slideY(
-                    begin: 1,
-                    end: 0,
-                    duration: 800.ms,
-                    curve: Curves.easeOutCubic,
-                  ),
+              ),
               const SizedBox(height: 10),
               Text(
                 'نظام إدارة المهام والحضور',
                 style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.white70,
                     ),
-              )
-                  .animate()
-                  .fadeIn(delay: 800.ms, duration: 800.ms)
-                  .slideY(
-                    begin: 1,
-                    end: 0,
-                    duration: 800.ms,
-                    curve: Curves.easeOutCubic,
-                  ),
+              ),
               const SizedBox(height: 60),
               const CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              )
-                  .animate()
-                  .fadeIn(delay: 1200.ms, duration: 600.ms),
+              ),
             ],
           ),
         ),

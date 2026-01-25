@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/employee_provider.dart';
 import '../../../core/providers/request_provider.dart';
@@ -185,7 +184,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0);
+    );
   }
 
   Widget _buildStatsCards(
@@ -226,7 +225,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
           ),
         ],
       ),
-    ).animate().fadeIn(delay: 200.ms, duration: 600.ms);
+    );
   }
 
   Widget _buildStatCard(
@@ -298,7 +297,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
           Tab(text: 'الإحصائيات'),
         ],
       ),
-    ).animate().fadeIn(delay: 300.ms, duration: 600.ms);
+    );
   }
 
   Widget _buildTasksTab(BuildContext context, List<TaskModel> tasks) {
@@ -416,8 +415,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 400.ms);
+    );
   }
 
   Widget _buildAttendanceTab(
@@ -685,8 +683,7 @@ class _EmployeeDetailScreenState extends State<EmployeeDetailScreen>
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 400.ms);
+    );
   }
 
   Widget _buildTimeInfo(

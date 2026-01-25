@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/shift_provider.dart';
 import '../../../core/providers/store_provider.dart';
@@ -76,7 +75,7 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
                     ),
                   ],
                 ),
-              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+              ),
 
               // Store Filter
               Padding(
@@ -115,7 +114,7 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
                     );
                   },
                 ),
-              ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 20),
 
@@ -172,10 +171,7 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
         icon: const Icon(Icons.add),
         label: const Text('إضافة شفت'),
         backgroundColor: AppTheme.primaryColor,
-      ).animate().fadeIn(delay: 600.ms).scale(
-            begin: const Offset(0.8, 0.8),
-            end: const Offset(1, 1),
-          ),
+      ),
     );
   }
 
@@ -328,9 +324,7 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildInfoChip(IconData icon, String label, Color color) {

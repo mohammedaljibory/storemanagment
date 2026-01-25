@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -130,7 +129,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0);
+    );
   }
 
   Widget _buildEmployeeSelector(BuildContext context) {
@@ -187,7 +186,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(delay: 100.ms, duration: 600.ms).slideY(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildDateRangeSelector(BuildContext context) {
@@ -297,7 +296,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(delay: 200.ms, duration: 600.ms).slideY(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildQuickDateButton(String label, int days) {
@@ -354,7 +353,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
           }),
         ],
       ),
-    ).animate().fadeIn(delay: 300.ms, duration: 600.ms).slideY(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildCheckOption(String label, bool value, Function(bool?) onChanged) {
@@ -399,7 +398,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
           ),
         ),
       ),
-    ).animate().fadeIn(delay: 400.ms, duration: 600.ms).scale(begin: const Offset(0.95, 0.95), end: const Offset(1, 1));
+    );
   }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/theme_provider.dart';
@@ -49,7 +48,7 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                   ],
-                ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+                ),
 
                 const SizedBox(height: 30),
 
@@ -131,9 +130,6 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                ).animate().fadeIn(delay: 100.ms, duration: 600.ms).scale(
-                  begin: const Offset(0.9, 0.9),
-                  end: const Offset(1, 1),
                 ),
 
                 // ========== EMPLOYEE ONLY SECTIONS ==========
@@ -177,7 +173,7 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
+                  ),
 
                   const SizedBox(height: 20),
 
@@ -243,7 +239,7 @@ class ProfileScreen extends StatelessWidget {
                         ),
                       ],
                     ),
-                  ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+                  ),
                 ],
                 // ========== END EMPLOYEE ONLY SECTIONS ==========
 
@@ -304,7 +300,7 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
+                ),
 
                 const SizedBox(height: 20),
 
@@ -323,7 +319,7 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                ).animate().fadeIn(delay: 500.ms, duration: 600.ms),
+                ),
 
                 const SizedBox(height: 20),
 

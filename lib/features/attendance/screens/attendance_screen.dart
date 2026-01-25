@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/attendance_provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -85,7 +84,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     ),
                   ],
                 ),
-              ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+              ),
 
               // Month Indicator
               Container(
@@ -107,7 +106,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     fontSize: 16,
                   ),
                 ),
-              ).animate().fadeIn(delay: 100.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 20),
 
@@ -154,7 +153,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                         ),
                       ],
                     ),
-                  ).animate().fadeIn(delay: 200.ms, duration: 600.ms);
+                  );
                 },
               ),
 
@@ -187,7 +186,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     Tab(text: 'الإحصائيات'),
                   ],
                 ),
-              ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 20),
 
@@ -361,9 +360,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildAttendanceCard(AttendanceModel attendance, int index) {
@@ -489,9 +486,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
           ],
         ],
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildTimeInfo(String label, String time, String expected, Color color) {
@@ -622,7 +617,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     _buildStatRow('أيام الخروج المبكر', '${stats['earlyLeaveDays']} يوم', AppTheme.errorColor),
                   ],
                 ),
-              ).animate().fadeIn(delay: 100.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 15),
 
@@ -657,7 +652,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     ),
                   ],
                 ),
-              ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 15),
 
@@ -676,7 +671,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                     _buildPerformanceIndicator(stats),
                   ],
                 ),
-              ).animate().fadeIn(delay: 300.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 20),
             ],

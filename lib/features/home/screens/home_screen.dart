@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
@@ -225,18 +224,13 @@ class _DashboardTabState extends State<DashboardTab> {
                     ],
                   ),
                 ],
-              ).animate()
-                  .fadeIn(duration: 600.ms)
-                  .slideX(begin: -0.2, end: 0),
-              
+              ),
+
               const SizedBox(height: 20),
 
               // Offline Sync Indicator
               if (attendanceProvider.hasOfflineData)
-                _buildOfflineSyncIndicator(context, attendanceProvider, isDarkMode)
-                    .animate()
-                    .fadeIn(duration: 400.ms)
-                    .slideY(begin: -0.2, end: 0),
+                _buildOfflineSyncIndicator(context, attendanceProvider, isDarkMode),
 
               if (attendanceProvider.hasOfflineData)
                 const SizedBox(height: 15),
@@ -312,19 +306,14 @@ class _DashboardTabState extends State<DashboardTab> {
                       ),
                     ],
                   ),
-                ).animate()
-                    .fadeIn(delay: 100.ms, duration: 600.ms)
-                    .slideY(begin: 0.2, end: 0),
+                ),
 
                 const SizedBox(height: 15),
               ],
 
               // Vacation Greeting Card
               if (user != null && requestProvider.isOnVacationToday(user.id)) ...[
-                _buildVacationGreetingCard(context, user.id, requestProvider, isDarkMode)
-                    .animate()
-                    .fadeIn(delay: 150.ms, duration: 600.ms)
-                    .slideY(begin: 0.2, end: 0),
+                _buildVacationGreetingCard(context, user.id, requestProvider, isDarkMode),
                 const SizedBox(height: 15),
               ],
 
@@ -336,17 +325,13 @@ class _DashboardTabState extends State<DashboardTab> {
                 storeProvider,
                 shiftProvider,
                 isDarkMode,
-              ).animate()
-                  .fadeIn(delay: 200.ms, duration: 600.ms)
-                  .slideY(begin: 0.2, end: 0),
-              
+              ),
+
               const SizedBox(height: 25),
               
               // Today's Status
               if (attendanceProvider.isCheckedIn && attendanceProvider.currentSession != null) ...[
-                _buildTodayStatus(context, attendanceProvider, isDarkMode)
-                    .animate()
-                    .fadeIn(delay: 300.ms, duration: 600.ms),
+                _buildTodayStatus(context, attendanceProvider, isDarkMode),
                 const SizedBox(height: 15),
 
                 // Break Button - shows during active attendance
@@ -355,8 +340,7 @@ class _DashboardTabState extends State<DashboardTab> {
                     attendance: attendanceProvider.currentSession!,
                     userId: user.id,
                     userName: user.name,
-                  ).animate()
-                      .fadeIn(delay: 350.ms, duration: 600.ms),
+                  ),
                 const SizedBox(height: 25),
               ],
               
@@ -366,9 +350,8 @@ class _DashboardTabState extends State<DashboardTab> {
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
-              ).animate()
-                  .fadeIn(delay: 400.ms, duration: 600.ms),
-              
+              ),
+
               const SizedBox(height: 15),
               
               Row(
@@ -441,9 +424,8 @@ class _DashboardTabState extends State<DashboardTab> {
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
-              ).animate()
-                  .fadeIn(delay: 850.ms, duration: 600.ms),
-              
+              ),
+
               const SizedBox(height: 15),
 
               // NEW: Quick action buttons
@@ -484,8 +466,7 @@ class _DashboardTabState extends State<DashboardTab> {
                     ),
                   ),
                 ],
-              ).animate()
-                  .fadeIn(delay: 900.ms, duration: 600.ms),
+              ),
 
               const SizedBox(height: 25),
               
@@ -495,9 +476,8 @@ class _DashboardTabState extends State<DashboardTab> {
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
-              ).animate()
-                  .fadeIn(delay: 950.ms, duration: 600.ms),
-              
+              ),
+
               const SizedBox(height: 15),
               
               _buildTodayTasks(context, taskProvider, isDarkMode),
@@ -992,9 +972,7 @@ class _DashboardTabState extends State<DashboardTab> {
                 ],
               ),
             ),
-          ).animate()
-              .fadeIn(delay: Duration(milliseconds: 1000 + (index * 100)), duration: 600.ms)
-              .slideX(begin: 0.2, end: 0);
+          );
         }),
         
         if (todayTasks.length < pendingTasks.length + inProgressTasks.length)
@@ -1093,12 +1071,7 @@ class _DashboardTabState extends State<DashboardTab> {
           ),
         ],
       ),
-    ).animate()
-        .fadeIn(delay: delay, duration: 600.ms)
-        .scale(
-          begin: const Offset(0.9, 0.9),
-          end: const Offset(1, 1),
-        );
+    );
   }
 
   void _showErrorDialog(BuildContext context, String message) {

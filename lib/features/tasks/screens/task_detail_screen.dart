@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -700,7 +699,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ),
                         ],
                       ],
-                    ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0),
+                    ),
 
                     const SizedBox(height: 20),
 
@@ -765,7 +764,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ],
                         ],
                       ),
-                    ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
+                    ),
 
                     const SizedBox(height: 20),
 
@@ -793,7 +792,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           ],
                         ],
                       ),
-                    ).animate().fadeIn(delay: 400.ms, duration: 600.ms),
+                    ),
 
                     // Admin Approval Section
                     if (authProvider.isAdmin && task.status == TaskStatus.waitingApproval) ...[
@@ -879,7 +878,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ],
                         ),
-                      ).animate().fadeIn(delay: 600.ms, duration: 600.ms),
                     ],
 
                     // Employee Submit Section
@@ -965,7 +963,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ],
                         ),
-                      ).animate().fadeIn(delay: 600.ms, duration: 600.ms),
                     ],
 
                     // Waiting Approval (Employee View)
@@ -1083,7 +1080,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ],
                           ],
                         ),
-                      ).animate().fadeIn(delay: 800.ms, duration: 600.ms),
                     ],
 
                     // Failed Task

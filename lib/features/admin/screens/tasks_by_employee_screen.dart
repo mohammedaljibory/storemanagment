@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/task_provider.dart';
 import '../../../core/providers/employee_provider.dart';
@@ -107,7 +106,7 @@ class _TasksByEmployeeScreenState extends State<TasksByEmployeeScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0);
+    );
   }
 
   Widget _buildContent(BuildContext context) {
@@ -154,7 +153,7 @@ class _TasksByEmployeeScreenState extends State<TasksByEmployeeScreen> {
                     _buildSummaryItem('مكتملة', totalCompleted, AppTheme.successColor),
                   ],
                 ),
-              ).animate().fadeIn(delay: 200.ms, duration: 600.ms).slideY(begin: 0.2, end: 0),
+              ),
             ),
             const SizedBox(height: 20),
             // Employees List
@@ -327,9 +326,7 @@ class _TasksByEmployeeScreenState extends State<TasksByEmployeeScreen> {
           ],
         ),
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: 100 * index), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildCountBadge(int count, Color color) {

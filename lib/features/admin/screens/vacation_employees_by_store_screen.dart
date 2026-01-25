@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/store_provider.dart';
 import '../../../core/providers/request_provider.dart';
@@ -98,7 +97,7 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
           ),
         ],
       ),
-    ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0);
+    );
   }
 
   Widget _buildContent(BuildContext context) {
@@ -181,7 +180,7 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
                 ),
               ],
             ),
-          ).animate().fadeIn(delay: 200.ms, duration: 600.ms).slideY(begin: 0.2, end: 0),
+          ),
         ),
         const SizedBox(height: 20),
         // Stores List
@@ -327,9 +326,7 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
           ],
         ),
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: 100 * index), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   Widget _buildVacationList(BuildContext context, List<RequestModel> vacations) {
