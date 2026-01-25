@@ -347,6 +347,96 @@ class NotificationService {
     await _notifications.cancel(id);
   }
 
+  // ============ RECURRING TASK NOTIFICATIONS ============
+
+  /// Schedule recurring task notification
+  static Future<void> scheduleRecurringTaskNotification({
+    required String taskId,
+    required String taskTitle,
+    required String repeatTime, // HH:mm format
+    required String repeatType, // daily, weekly, monthly, yearly
+    required List<String> assignedToNames,
+  }) async {
+    // Parse the repeat time
+    final timeParts = repeatTime.split(':');
+    final hour = int.parse(timeParts[0]);
+    final minute = int.parse(timeParts[1]);
+
+    // Calculate next notification time
+    final now = DateTime.now();
+    var scheduledTime = DateTime(now.year, now.month, now.day, hour, minute);
+
+    // If the time today has passed, schedule for next occurrence
+    if (scheduledTime.isBefore(now)) {
+      switch (repeatType) {
+        case 'daily':
+          scheduledTime = scheduledTime.add(const Duration(days: 1));
+          break;
+        case 'weekly':
+          scheduledTime = scheduledTime.add(const Duration(days: 7));
+          break;
+        case 'monthly':
+          scheduledTime = DateTime(now.year, now.month + 1, now.day, hour, minute);
+          break;
+        case 'yearly':
+          scheduledTime = DateTime(now.year + 1, now.month, now.day, hour, minute);
+          break;
+      }
+    }
+
+    // Generate unique ID based on task ID
+    final notificationId = taskId.hashCode;
+
+    await scheduleNotification(
+      id: notificationId,
+      title: '🔔 تذكير بمهمة متكررة',
+      body: 'المهمة: $taskTitle\nالمسؤولين: ${assignedToNames.join("، ")}',
+      scheduledTime: scheduledTime,
+      payload: 'recurring_task_$taskId',
+    );
+  }
+
+  /// Cancel recurring task notification
+  static Future<void> cancelRecurringTaskNotification(String taskId) async {
+    final notificationId = taskId.hashCode;
+    await cancel(notificationId);
+  }
+
+  /// Notify about recurring task (when it repeats)
+  static Future<void> notifyRecurringTask({
+    required String taskTitle,
+    required String repeatType,
+    required List<String> assignedToNames,
+  }) async {
+    String repeatText;
+    switch (repeatType) {
+      case 'daily':
+        repeatText = 'يومية';
+        break;
+      case 'weekly':
+        repeatText = 'أسبوعية';
+        break;
+      case 'monthly':
+        repeatText = 'شهرية';
+        break;
+      case 'yearly':
+        repeatText = 'سنوية';
+        break;
+      default:
+        repeatText = 'متكررة';
+    }
+
+    await showNotification(
+      title: '🔄 مهمة $repeatText',
+      body: 'المهمة: $taskTitle\nتم تجديد المهمة - يرجى البدء بالتنفيذ',
+      id: DateTime.now().millisecond,
+      channelId: _taskChannelId,
+      channelName: 'Task Notifications',
+      importance: Importance.high,
+      payload: 'recurring_task_reminder',
+    );
+  }
+
   // ============ TASK NOTIFICATIONS ============
 
   /// Task assigned to employee

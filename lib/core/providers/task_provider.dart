@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../models/task_model.dart';
+import '../services/notification_service.dart';
 
 class TaskProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -161,12 +162,13 @@ class TaskProvider extends ChangeNotifier {
       notifyListeners();
 
       // If multiple employees selected, create task for each OR create single shared task
+      TaskModel createdTask;
       if (task.assignedToList.isNotEmpty) {
         // Create a single shared task with all employees
         final docRef = await _firestore.collection('tasks').add(task.toJson());
-        final newTask = task.copyWith(id: docRef.id);
+        createdTask = task.copyWith(id: docRef.id);
         await docRef.update({'id': docRef.id});
-        _tasks.insert(0, newTask);
+        _tasks.insert(0, createdTask);
       } else {
         // Single employee task
         final taskWithList = task.copyWith(
@@ -174,9 +176,40 @@ class TaskProvider extends ChangeNotifier {
           assignedToNamesList: [task.assignedToName],
         );
         final docRef = await _firestore.collection('tasks').add(taskWithList.toJson());
-        final newTask = taskWithList.copyWith(id: docRef.id);
+        createdTask = taskWithList.copyWith(id: docRef.id);
         await docRef.update({'id': docRef.id});
-        _tasks.insert(0, newTask);
+        _tasks.insert(0, createdTask);
+      }
+
+      // Schedule recurring task notification if enabled
+      if (createdTask.isRepeating &&
+          createdTask.repeatTime != null &&
+          createdTask.repeatNotificationEnabled) {
+        await NotificationService.scheduleRecurringTaskNotification(
+          taskId: createdTask.id,
+          taskTitle: createdTask.title,
+          repeatTime: createdTask.repeatTime!,
+          repeatType: createdTask.repeatType.toString().split('.').last,
+          assignedToNames: createdTask.assignedToNamesList.isNotEmpty
+              ? createdTask.assignedToNamesList
+              : [createdTask.assignedToName],
+        );
+
+        // Save scheduled notification info to Firestore
+        await _firestore.collection('scheduled_notifications').doc(createdTask.id).set({
+          'taskId': createdTask.id,
+          'taskTitle': createdTask.title,
+          'repeatTime': createdTask.repeatTime,
+          'repeatType': createdTask.repeatType.toString().split('.').last,
+          'assignedToList': createdTask.assignedToList.isNotEmpty
+              ? createdTask.assignedToList
+              : [createdTask.assignedTo],
+          'assignedToNamesList': createdTask.assignedToNamesList.isNotEmpty
+              ? createdTask.assignedToNamesList
+              : [createdTask.assignedToName],
+          'enabled': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
 
       _isLoading = false;
@@ -553,9 +586,36 @@ class TaskProvider extends ChangeNotifier {
       parentTaskId: originalTask.parentTaskId ?? originalTask.id,
       isRepeating: true,
       nextRepeatDate: _calculateNextRepeatDate(nextDeadline, originalTask.repeatType),
+      repeatTime: originalTask.repeatTime,
+      repeatNotificationEnabled: originalTask.repeatNotificationEnabled,
     );
 
     await createTask(newTask);
+
+    // Send notification that task has recurred (if enabled)
+    if (originalTask.repeatNotificationEnabled) {
+      await NotificationService.notifyRecurringTask(
+        taskTitle: originalTask.title,
+        repeatType: originalTask.repeatType.toString().split('.').last,
+        assignedToNames: originalTask.assignedToNamesList.isNotEmpty
+            ? originalTask.assignedToNamesList
+            : [originalTask.assignedToName],
+      );
+
+      // Save notification to Firestore for in-app list
+      await _firestore.collection('notifications').add({
+        'type': 'recurring_task',
+        'title': '🔄 مهمة متكررة',
+        'body': 'تم تجديد المهمة "${originalTask.title}" - يرجى البدء بالتنفيذ',
+        'taskId': newTask.id,
+        'taskTitle': originalTask.title,
+        'assignedToList': originalTask.assignedToList,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': false,
+        'forEmployee': true,
+      });
+    }
   }
 
   /// Calculate next deadline based on repeat type (NEW)
@@ -619,12 +679,49 @@ class TaskProvider extends ChangeNotifier {
         'repeatType': task.repeatType.toString().split('.').last,
         'isRepeating': task.isRepeating,
         'nextRepeatDate': task.nextRepeatDate?.toIso8601String(),
+        'repeatTime': task.repeatTime,
+        'repeatNotificationEnabled': task.repeatNotificationEnabled,
       });
 
       // Update local list
       final index = _tasks.indexWhere((t) => t.id == task.id);
       if (index != -1) {
         _tasks[index] = task;
+      }
+
+      // Update recurring notification if changed
+      if (task.isRepeating && task.repeatTime != null && task.repeatNotificationEnabled) {
+        // Cancel old notification and schedule new one
+        await NotificationService.cancelRecurringTaskNotification(task.id);
+        await NotificationService.scheduleRecurringTaskNotification(
+          taskId: task.id,
+          taskTitle: task.title,
+          repeatTime: task.repeatTime!,
+          repeatType: task.repeatType.toString().split('.').last,
+          assignedToNames: task.assignedToNamesList.isNotEmpty
+              ? task.assignedToNamesList
+              : [task.assignedToName],
+        );
+
+        // Update scheduled notification in Firestore
+        await _firestore.collection('scheduled_notifications').doc(task.id).set({
+          'taskId': task.id,
+          'taskTitle': task.title,
+          'repeatTime': task.repeatTime,
+          'repeatType': task.repeatType.toString().split('.').last,
+          'assignedToList': task.assignedToList.isNotEmpty
+              ? task.assignedToList
+              : [task.assignedTo],
+          'assignedToNamesList': task.assignedToNamesList.isNotEmpty
+              ? task.assignedToNamesList
+              : [task.assignedToName],
+          'enabled': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } else if (!task.isRepeating || !task.repeatNotificationEnabled) {
+        // Cancel notification if repeat is disabled
+        await NotificationService.cancelRecurringTaskNotification(task.id);
+        await _firestore.collection('scheduled_notifications').doc(task.id).delete();
       }
 
       _isLoading = false;

@@ -33,6 +33,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
   
   // NEW: Repeat options
   TaskRepeatType _selectedRepeatType = TaskRepeatType.none;
+  TimeOfDay? _repeatNotificationTime;
+  bool _repeatNotificationEnabled = true;
 
   @override
   void initState() {
@@ -390,33 +392,119 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
                                   );
                                 }).toList(),
                               ),
-                              if (_selectedRepeatType != TaskRepeatType.none)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 10),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.secondaryColor.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(10),
+                              if (_selectedRepeatType != TaskRepeatType.none) ...[
+                                const SizedBox(height: 15),
+                                // Notification time picker
+                                Row(
+                                  children: [
+                                    const Icon(Icons.notifications_active,
+                                        size: 18, color: AppTheme.accentColor),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'وقت الإشعار:',
+                                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.info_outline, 
-                                            size: 18, color: AppTheme.secondaryColor),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'ستتكرر هذه المهمة ${_getRepeatText(_selectedRepeatType)} بعد الموافقة عليها',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: AppTheme.secondaryColor,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () async {
+                                          final time = await showTimePicker(
+                                            context: context,
+                                            initialTime: _repeatNotificationTime ??
+                                                const TimeOfDay(hour: 9, minute: 0),
+                                          );
+                                          if (time != null) {
+                                            setState(() {
+                                              _repeatNotificationTime = time;
+                                            });
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 8),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.accentColor.withOpacity(0.1),
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(
+                                              color: AppTheme.accentColor.withOpacity(0.3),
                                             ),
                                           ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(Icons.access_time,
+                                                  size: 18, color: AppTheme.accentColor),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                _repeatNotificationTime != null
+                                                    ? '${_repeatNotificationTime!.hour.toString().padLeft(2, '0')}:${_repeatNotificationTime!.minute.toString().padLeft(2, '0')}'
+                                                    : 'اختر الوقت',
+                                                style: TextStyle(
+                                                  color: _repeatNotificationTime != null
+                                                      ? AppTheme.accentColor
+                                                      : Colors.grey,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ],
+                                      ),
                                     ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                // Enable/Disable notification switch
+                                Row(
+                                  children: [
+                                    Switch(
+                                      value: _repeatNotificationEnabled,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _repeatNotificationEnabled = value;
+                                        });
+                                      },
+                                      activeColor: AppTheme.primaryColor,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'تفعيل الإشعارات عند التكرار',
+                                        style: Theme.of(context).textTheme.bodyMedium,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                // Info box
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.secondaryColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.info_outline,
+                                          size: 18, color: AppTheme.secondaryColor),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _repeatNotificationTime != null
+                                              ? 'ستتكرر هذه المهمة ${_getRepeatText(_selectedRepeatType)} في الساعة ${_repeatNotificationTime!.hour.toString().padLeft(2, '0')}:${_repeatNotificationTime!.minute.toString().padLeft(2, '0')}'
+                                              : 'ستتكرر هذه المهمة ${_getRepeatText(_selectedRepeatType)} بعد الموافقة عليها',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppTheme.secondaryColor,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
+                              ],
                             ],
                           ),
                         ).animate().fadeIn(delay: 800.ms, duration: 600.ms),
@@ -590,6 +678,12 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
       // Get first employee as primary (for backward compatibility)
       final primaryEmployee = _selectedEmployees.first;
 
+      // Format repeat time
+      String? repeatTimeStr;
+      if (_repeatNotificationTime != null && _selectedRepeatType != TaskRepeatType.none) {
+        repeatTimeStr = '${_repeatNotificationTime!.hour.toString().padLeft(2, '0')}:${_repeatNotificationTime!.minute.toString().padLeft(2, '0')}';
+      }
+
       final task = TaskModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         title: _titleController.text,
@@ -612,6 +706,8 @@ class _CreateTaskScreenState extends State<CreateTaskScreen> {
         nextRepeatDate: _selectedRepeatType != TaskRepeatType.none
             ? _calculateNextRepeatDate(_selectedDeadline, _selectedRepeatType)
             : null,
+        repeatTime: repeatTimeStr,
+        repeatNotificationEnabled: _repeatNotificationEnabled,
       );
 
       final success = await context.read<TaskProvider>().createTask(task);

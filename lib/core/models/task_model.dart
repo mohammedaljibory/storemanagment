@@ -49,6 +49,8 @@ class TaskModel {
   final String? parentTaskId;  // For repeated tasks, reference to original
   final bool isRepeating;
   final DateTime? nextRepeatDate;
+  final String? repeatTime;  // Time for recurring notification (HH:mm format)
+  final bool repeatNotificationEnabled;  // Whether to send notifications
 
   TaskModel({
     required this.id,
@@ -81,6 +83,8 @@ class TaskModel {
     this.parentTaskId,
     this.isRepeating = false,
     this.nextRepeatDate,
+    this.repeatTime,
+    this.repeatNotificationEnabled = true,
   });
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
@@ -136,6 +140,8 @@ class TaskModel {
       nextRepeatDate: json['nextRepeatDate'] != null
           ? DateTime.parse(json['nextRepeatDate'] as String)
           : null,
+      repeatTime: json['repeatTime'] as String?,
+      repeatNotificationEnabled: json['repeatNotificationEnabled'] as bool? ?? true,
     );
   }
 
@@ -171,6 +177,8 @@ class TaskModel {
       'parentTaskId': parentTaskId,
       'isRepeating': isRepeating,
       'nextRepeatDate': nextRepeatDate?.toIso8601String(),
+      'repeatTime': repeatTime,
+      'repeatNotificationEnabled': repeatNotificationEnabled,
     };
   }
 
@@ -205,6 +213,8 @@ class TaskModel {
     String? parentTaskId,
     bool? isRepeating,
     DateTime? nextRepeatDate,
+    String? repeatTime,
+    bool? repeatNotificationEnabled,
   }) {
     return TaskModel(
       id: id ?? this.id,
@@ -237,6 +247,8 @@ class TaskModel {
       parentTaskId: parentTaskId ?? this.parentTaskId,
       isRepeating: isRepeating ?? this.isRepeating,
       nextRepeatDate: nextRepeatDate ?? this.nextRepeatDate,
+      repeatTime: repeatTime ?? this.repeatTime,
+      repeatNotificationEnabled: repeatNotificationEnabled ?? this.repeatNotificationEnabled,
     );
   }
 
@@ -286,6 +298,16 @@ class TaskModel {
       case TaskRepeatType.yearly:
         return 'سنوياً';
     }
+  }
+
+  // Full repeat info text
+  String get repeatInfoText {
+    if (repeatType == TaskRepeatType.none) return 'لا يتكرر';
+    String text = repeatTypeText;
+    if (repeatTime != null) {
+      text += ' في الساعة $repeatTime';
+    }
+    return text;
   }
 
   // Check if task is for multiple employees
