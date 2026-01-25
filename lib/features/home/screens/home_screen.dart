@@ -363,7 +363,6 @@ class _DashboardTabState extends State<DashboardTab> {
                       '${taskProvider.pendingTasks.length + taskProvider.inProgressTasks.length}',
                       Icons.task,
                       AppTheme.primaryColor,
-                      delay: 500.ms,
                     ),
                   ),
                   const SizedBox(width: 15),
@@ -374,7 +373,6 @@ class _DashboardTabState extends State<DashboardTab> {
                       '${taskProvider.completedTasks.length}',
                       Icons.check_circle,
                       AppTheme.successColor,
-                      delay: 600.ms,
                     ),
                   ),
                 ],
@@ -397,7 +395,6 @@ class _DashboardTabState extends State<DashboardTab> {
                           '${stats['totalDays']}',
                           Icons.calendar_today,
                           AppTheme.secondaryColor,
-                          delay: 700.ms,
                         ),
                       ),
                       const SizedBox(width: 15),
@@ -408,7 +405,6 @@ class _DashboardTabState extends State<DashboardTab> {
                           '${stats['lateDays']}',
                           Icons.schedule,
                           AppTheme.warningColor,
-                          delay: 800.ms,
                         ),
                       ),
                     ],
@@ -1031,7 +1027,6 @@ class _DashboardTabState extends State<DashboardTab> {
     String value,
     IconData icon,
     Color color,
-    {Duration delay = Duration.zero}
   ) {
     return AnimatedGlassCard(
       height: 100,

@@ -878,6 +878,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ],
                         ),
+                      ),
                     ],
 
                     // Employee Submit Section
@@ -963,6 +964,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ),
                           ],
                         ),
+                      ),
                     ],
 
                     // Waiting Approval (Employee View)
@@ -1080,6 +1082,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                             ],
                           ],
                         ),
+                      ),
                     ],
 
                     // Failed Task
