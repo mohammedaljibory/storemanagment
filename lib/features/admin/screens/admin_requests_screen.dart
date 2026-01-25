@@ -513,6 +513,20 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
               ],
             ),
           ],
+
+          // Delete button (always available for admin)
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () => _deleteRequest(request),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('حذف الطلب'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1150,6 +1164,97 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
         );
       },
     );
+  }
+
+  Future<void> _deleteRequest(RequestModel request) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.delete_forever, color: AppTheme.errorColor),
+            ),
+            const SizedBox(width: 10),
+            const Text('حذف الطلب'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'طلب ${request.employeeName}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '${request.typeText} - ${request.formattedTargetDate}',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 15),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber, color: AppTheme.errorColor, size: 18),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'سيتم حذف هذا الطلب نهائياً ولا يمكن استرجاعه',
+                      style: TextStyle(
+                        color: AppTheme.errorColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            icon: const Icon(Icons.delete, size: 18),
+            label: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final success = await context.read<RequestProvider>().deleteRequest(request.id);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف الطلب'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.read<RequestProvider>().errorMessage ?? 'فشل في حذف الطلب'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    }
   }
 
   void _showRejectDialog(RequestModel request) {

@@ -502,6 +502,20 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
               ),
             ),
           ],
+
+          // Delete button for all requests
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton.icon(
+              onPressed: () => _deleteRequest(request),
+              icon: const Icon(Icons.delete_outline, size: 18),
+              label: const Text('حذف الطلب'),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey,
+              ),
+            ),
+          ),
         ],
       ),
     ).animate()
@@ -1052,6 +1066,93 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
           const SnackBar(
             content: Text('تم إلغاء الطلب'),
             backgroundColor: AppTheme.successColor,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteRequest(RequestModel request) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.delete_forever, color: AppTheme.errorColor),
+            ),
+            const SizedBox(width: 10),
+            const Text('حذف الطلب'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'هل أنت متأكد من حذف هذا الطلب نهائياً؟',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.errorColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber, color: AppTheme.errorColor, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'لا يمكن التراجع عن هذا الإجراء',
+                      style: TextStyle(
+                        color: AppTheme.errorColor,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            icon: const Icon(Icons.delete, size: 18),
+            label: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final success = await context.read<RequestProvider>().deleteRequest(request.id);
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('تم حذف الطلب'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.read<RequestProvider>().errorMessage ?? 'فشل في حذف الطلب'),
+            backgroundColor: AppTheme.errorColor,
           ),
         );
       }

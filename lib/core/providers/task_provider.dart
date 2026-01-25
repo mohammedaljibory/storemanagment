@@ -621,19 +621,50 @@ class TaskProvider extends ChangeNotifier {
   /// Calculate next deadline based on repeat type (NEW)
   DateTime? _calculateNextDeadline(TaskModel task) {
     final now = DateTime.now();
+
+    // Use repeatTime if available, otherwise use original deadline time
+    int hour = task.deadline.hour;
+    int minute = task.deadline.minute;
+
+    if (task.repeatTime != null) {
+      final parts = task.repeatTime!.split(':');
+      if (parts.length == 2) {
+        hour = int.tryParse(parts[0]) ?? hour;
+        minute = int.tryParse(parts[1]) ?? minute;
+      }
+    }
+
+    DateTime nextDeadline;
     switch (task.repeatType) {
       case TaskRepeatType.daily:
-        return DateTime(now.year, now.month, now.day, 
-            task.deadline.hour, task.deadline.minute).add(const Duration(days: 1));
+        // Next occurrence is tomorrow at the specified time
+        nextDeadline = DateTime(now.year, now.month, now.day, hour, minute);
+        // If the time has already passed today, schedule for tomorrow
+        if (nextDeadline.isBefore(now)) {
+          nextDeadline = nextDeadline.add(const Duration(days: 1));
+        }
+        return nextDeadline;
       case TaskRepeatType.weekly:
-        return DateTime(now.year, now.month, now.day,
-            task.deadline.hour, task.deadline.minute).add(const Duration(days: 7));
+        nextDeadline = DateTime(now.year, now.month, now.day, hour, minute);
+        // Schedule for 7 days from now
+        return nextDeadline.add(const Duration(days: 7));
       case TaskRepeatType.monthly:
-        return DateTime(now.year, now.month + 1, task.deadline.day,
-            task.deadline.hour, task.deadline.minute);
+        // Keep the same day of month (or closest valid day)
+        int targetDay = task.deadline.day;
+        int nextMonth = now.month + 1;
+        int nextYear = now.year;
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear++;
+        }
+        // Handle edge case for months with fewer days
+        int daysInMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+        if (targetDay > daysInMonth) {
+          targetDay = daysInMonth;
+        }
+        return DateTime(nextYear, nextMonth, targetDay, hour, minute);
       case TaskRepeatType.yearly:
-        return DateTime(now.year + 1, task.deadline.month, task.deadline.day,
-            task.deadline.hour, task.deadline.minute);
+        return DateTime(now.year + 1, task.deadline.month, task.deadline.day, hour, minute);
       case TaskRepeatType.none:
         return null;
     }
@@ -647,8 +678,19 @@ class TaskProvider extends ChangeNotifier {
       case TaskRepeatType.weekly:
         return deadline.add(const Duration(days: 7));
       case TaskRepeatType.monthly:
-        return DateTime(deadline.year, deadline.month + 1, deadline.day,
-            deadline.hour, deadline.minute);
+        int nextMonth = deadline.month + 1;
+        int nextYear = deadline.year;
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear++;
+        }
+        // Handle edge case for months with fewer days
+        int targetDay = deadline.day;
+        int daysInMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+        if (targetDay > daysInMonth) {
+          targetDay = daysInMonth;
+        }
+        return DateTime(nextYear, nextMonth, targetDay, deadline.hour, deadline.minute);
       case TaskRepeatType.yearly:
         return DateTime(deadline.year + 1, deadline.month, deadline.day,
             deadline.hour, deadline.minute);
