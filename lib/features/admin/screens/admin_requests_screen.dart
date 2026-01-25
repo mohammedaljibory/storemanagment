@@ -989,6 +989,10 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
                     final startMinutes = modifiedStartTime!.hour * 60 + modifiedStartTime!.minute;
                     final endMinutes = modifiedEndTime!.hour * 60 + modifiedEndTime!.minute;
                     durationMinutes = endMinutes - startMinutes;
+                    // FIX: Handle midnight crossing (e.g., 23:00 to 01:00)
+                    if (durationMinutes < 0) {
+                      durationMinutes += 24 * 60; // Add 24 hours in minutes
+                    }
                   }
 
                   final success = await context.read<RequestProvider>().approveRequest(

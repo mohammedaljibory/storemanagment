@@ -308,6 +308,19 @@ class TimeOffMonitorService {
       for (var doc in snapshot.docs) {
         final data = doc.data();
         data['id'] = doc.id;
+        // Convert Firestore Timestamps to ISO strings
+        if (data['requestDate'] is Timestamp) {
+          data['requestDate'] = (data['requestDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['targetDate'] is Timestamp) {
+          data['targetDate'] = (data['targetDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['respondedAt'] is Timestamp) {
+          data['respondedAt'] = (data['respondedAt'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['actualReturnTime'] is Timestamp) {
+          data['actualReturnTime'] = (data['actualReturnTime'] as Timestamp).toDate().toIso8601String();
+        }
         final request = RequestModel.fromJson(data);
 
         // Check if blocked
@@ -335,6 +348,20 @@ class TimeOffMonitorService {
             'late': true,
             'minutesLate': request.minutesLate,
             'remainingGraceMinutes': request.remainingMinutesUntilDeadline,
+            'request': request,
+          };
+        }
+
+        // FIX: Block check-in if time-off is still active (before expected return time)
+        if (request.isTimeOffActive && !request.isExpectedReturnTimePassed) {
+          final returnTime = request.expectedReturnDateTime;
+          final remainingMinutes = returnTime != null
+              ? returnTime.difference(DateTime.now()).inMinutes
+              : 0;
+          return {
+            'blocked': true,
+            'reason': 'الزمنية لا تزال نشطة. يجب الانتظار حتى الساعة ${request.expectedReturnTime}',
+            'remainingMinutes': remainingMinutes,
             'request': request,
           };
         }

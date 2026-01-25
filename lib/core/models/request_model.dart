@@ -383,13 +383,22 @@ class RequestModel {
     if (expectedReturnTime == null) return null;
     final parts = expectedReturnTime!.split(':');
     if (parts.length != 2) return null;
-    return DateTime(
-      targetDate.year,
-      targetDate.month,
-      targetDate.day,
-      int.parse(parts[0]),
-      int.parse(parts[1]),
-    );
+    try {
+      final hour = int.parse(parts[0]);
+      final minute = int.parse(parts[1]);
+      // Validate hour and minute ranges
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+      return DateTime(
+        targetDate.year,
+        targetDate.month,
+        targetDate.day,
+        hour,
+        minute,
+      );
+    } catch (e) {
+      // Return null if parsing fails (invalid format)
+      return null;
+    }
   }
 
   /// Get deadline DateTime (expected return + grace minutes)

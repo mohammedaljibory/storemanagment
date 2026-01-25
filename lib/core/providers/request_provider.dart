@@ -190,6 +190,8 @@ class RequestProvider extends ChangeNotifier {
       }
       if (approvedEndTime != null) {
         updateData['endTime'] = approvedEndTime;
+        // CRITICAL FIX: Update expectedReturnTime when end time is modified
+        updateData['expectedReturnTime'] = approvedEndTime;
       }
 
       await _firestore.collection('requests').doc(requestId).update(updateData);
@@ -206,6 +208,8 @@ class RequestProvider extends ChangeNotifier {
           durationMinutes: approvedDurationMinutes ?? _requests[index].durationMinutes,
           startTime: approvedStartTime ?? _requests[index].startTime,
           endTime: approvedEndTime ?? _requests[index].endTime,
+          // CRITICAL FIX: Update expectedReturnTime when end time is modified
+          expectedReturnTime: approvedEndTime ?? _requests[index].expectedReturnTime,
         );
 
         // Build notification body
