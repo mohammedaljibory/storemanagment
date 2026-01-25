@@ -27,9 +27,11 @@ class _FreeEmployeeLocationScreenState extends State<FreeEmployeeLocationScreen>
 
   LatLng? _currentLocation;
   List<LatLng> _locationHistory = [];
+  List<Map<String, dynamic>> _locationHistoryDetails = [];
   DateTime? _lastUpdate;
   bool _isLoading = true;
   String? _attendanceId;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -98,29 +100,81 @@ class _FreeEmployeeLocationScreenState extends State<FreeEmployeeLocationScreen>
   }
 
   Future<void> _loadLocationHistory() async {
-    if (_attendanceId == null) return;
-
     try {
-      final snapshot = await _firestore
-          .collection('location_history')
-          .where('attendanceId', isEqualTo: _attendanceId)
-          .orderBy('timestamp', descending: true)
-          .limit(50)
-          .get();
+      QuerySnapshot snapshot;
 
-      final history = <LatLng>[];
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        if (data['latitude'] != null && data['longitude'] != null) {
-          history.add(LatLng(
-            data['latitude'] as double,
-            data['longitude'] as double,
-          ));
+      if (_attendanceId != null) {
+        // Load by attendanceId
+        try {
+          snapshot = await _firestore
+              .collection('location_history')
+              .where('attendanceId', isEqualTo: _attendanceId)
+              .orderBy('timestamp', descending: false)
+              .limit(100)
+              .get();
+        } catch (indexError) {
+          print('Index error, querying without order: $indexError');
+          snapshot = await _firestore
+              .collection('location_history')
+              .where('attendanceId', isEqualTo: _attendanceId)
+              .limit(100)
+              .get();
+        }
+      } else {
+        // Load by userId for selected date
+        final startOfDay = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+        final endOfDay = startOfDay.add(const Duration(days: 1));
+
+        try {
+          snapshot = await _firestore
+              .collection('location_history')
+              .where('userId', isEqualTo: widget.employee.id)
+              .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+              .where('timestamp', isLessThan: Timestamp.fromDate(endOfDay))
+              .orderBy('timestamp', descending: false)
+              .limit(100)
+              .get();
+        } catch (indexError) {
+          print('Index error for date query: $indexError');
+          // Fallback: query by userId only
+          snapshot = await _firestore
+              .collection('location_history')
+              .where('userId', isEqualTo: widget.employee.id)
+              .limit(100)
+              .get();
         }
       }
 
+      final history = <LatLng>[];
+      final historyDetails = <Map<String, dynamic>>[];
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data['latitude'] != null && data['longitude'] != null) {
+          final lat = (data['latitude'] as num).toDouble();
+          final lng = (data['longitude'] as num).toDouble();
+          history.add(LatLng(lat, lng));
+
+          DateTime? timestamp;
+          if (data['timestamp'] is Timestamp) {
+            timestamp = (data['timestamp'] as Timestamp).toDate();
+          }
+
+          historyDetails.add({
+            'latitude': lat,
+            'longitude': lng,
+            'timestamp': timestamp,
+            'speed': data['speed'],
+            'accuracy': data['accuracy'],
+          });
+        }
+      }
+
+      print('📍 Loaded ${history.length} location history points');
+
       setState(() {
         _locationHistory = history;
+        _locationHistoryDetails = historyDetails;
       });
     } catch (e) {
       print('Error loading location history: $e');
@@ -252,7 +306,147 @@ class _FreeEmployeeLocationScreenState extends State<FreeEmployeeLocationScreen>
             icon: const Icon(Icons.refresh),
             tooltip: 'تحديث الموقع',
           ),
+          IconButton(
+            onPressed: _showHistoryDialog,
+            icon: const Icon(Icons.history),
+            tooltip: 'سجل المواقع',
+          ),
         ],
+      ),
+    );
+  }
+
+  void _showHistoryDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.5,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.history, color: AppTheme.secondaryColor),
+                  const SizedBox(width: 10),
+                  Text(
+                    'سجل المواقع (${_locationHistoryDetails.length} نقطة)',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _selectedDate,
+                        firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                        lastDate: DateTime.now(),
+                      );
+                      if (date != null) {
+                        Navigator.pop(context);
+                        setState(() {
+                          _selectedDate = date;
+                          _attendanceId = null; // Clear to load by date
+                        });
+                        await _loadLocationHistory();
+                        _showHistoryDialog();
+                      }
+                    },
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text('${_selectedDate.day}/${_selectedDate.month}'),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: _locationHistoryDetails.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.location_off, size: 50, color: Colors.grey.shade400),
+                          const SizedBox(height: 10),
+                          Text(
+                            'لا يوجد سجل مواقع',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      itemCount: _locationHistoryDetails.length,
+                      itemBuilder: (context, index) {
+                        final point = _locationHistoryDetails[index];
+                        final timestamp = point['timestamp'] as DateTime?;
+                        final speed = point['speed'] as double?;
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            radius: 15,
+                            backgroundColor: AppTheme.secondaryColor.withOpacity(0.2),
+                            child: Text(
+                              '${index + 1}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.secondaryColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(
+                            '${point['latitude'].toStringAsFixed(5)}, ${point['longitude'].toStringAsFixed(5)}',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: Row(
+                            children: [
+                              if (timestamp != null) ...[
+                                Icon(Icons.access_time, size: 12, color: Colors.grey),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _formatDateTime(timestamp),
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                              if (speed != null && speed > 0) ...[
+                                const SizedBox(width: 10),
+                                Icon(Icons.speed, size: 12, color: Colors.grey),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${(speed * 3.6).toStringAsFixed(1)} km/h',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              ],
+                            ],
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.my_location, size: 18),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _mapController?.animateCamera(
+                                CameraUpdate.newLatLngZoom(
+                                  LatLng(point['latitude'], point['longitude']),
+                                  18,
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
