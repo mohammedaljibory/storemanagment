@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/employee_provider.dart';
 import '../../../core/providers/store_provider.dart';
@@ -69,7 +68,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         icon: const Icon(Icons.person_add),
         label: const Text('إضافة موظف'),
         backgroundColor: AppTheme.primaryColor,
-      ).animate().fadeIn(delay: 600.ms).scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1)),
+      ),
     );
   }
 
@@ -94,7 +93,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           const SizedBox(width: 48),
         ],
       ),
-    ).animate().fadeIn(duration: 600.ms).slideY(begin: -0.2, end: 0);
+    );
   }
 
   Widget _buildFilters(BuildContext context) {
@@ -156,10 +155,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   },
                 ),
               ),
-            ).animate().fadeIn(duration: 300.ms),
+            ),
         ],
       ),
-    ).animate().fadeIn(delay: 200.ms, duration: 600.ms);
+    );
   }
 
   Widget _buildEmployeeList(BuildContext context) {
@@ -388,9 +387,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
           ],
         ),
       ),
-    ).animate()
-        .fadeIn(delay: Duration(milliseconds: index * 100), duration: 600.ms)
-        .slideX(begin: 0.2, end: 0);
+    );
   }
 
   void _showEmployeeOptionsMenu(BuildContext context, UserModel employee) {
