@@ -21,6 +21,17 @@ class VacationEmployeesByStoreScreen extends StatefulWidget {
 
 class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStoreScreen> {
   String? _expandedStoreId;
+  Stream<List<RequestModel>>? _vacationsTodayStream;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() {
+        _vacationsTodayStream = context.read<RequestProvider>().vacationsTodayStream();
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,12 +113,26 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
 
   Widget _buildContent(BuildContext context) {
     final storeProvider = context.watch<StoreProvider>();
-    final requestProvider = context.watch<RequestProvider>();
     final stores = storeProvider.activeStores;
 
-    // Get today's vacations
-    final todayVacations = requestProvider.todayVacations;
+    // Use stream to prevent data flickering from shared _requests list
+    if (_vacationsTodayStream == null) {
+      // Fallback while stream is being set up
+      final requestProvider = context.watch<RequestProvider>();
+      final todayVacations = requestProvider.todayVacations;
+      return _buildContentBody(context, stores, todayVacations);
+    }
 
+    return StreamBuilder<List<RequestModel>>(
+      stream: _vacationsTodayStream,
+      builder: (context, snapshot) {
+        final todayVacations = snapshot.data ?? context.read<RequestProvider>().todayVacations;
+        return _buildContentBody(context, stores, todayVacations);
+      },
+    );
+  }
+
+  Widget _buildContentBody(BuildContext context, List<StoreModel> stores, List<RequestModel> todayVacations) {
     // Group vacations by store
     final Map<String, List<RequestModel>> vacationsByStore = {};
     for (var vacation in todayVacations) {

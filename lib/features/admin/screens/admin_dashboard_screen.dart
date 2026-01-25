@@ -28,6 +28,7 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Stream<List<AttendanceModel>>? _activeAttendanceStream;
+  Stream<List<RequestModel>>? _vacationsTodayStream;
   Timer? _durationRefreshTimer;
 
   @override
@@ -36,10 +37,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     _loadData();
     // Start listening for admin notifications
     AdminNotificationListener.startListening();
-    // Create stream once in initState
+    // Create streams once in initState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       setState(() {
         _activeAttendanceStream = context.read<AttendanceProvider>().activeAttendanceStream();
+        _vacationsTodayStream = context.read<RequestProvider>().vacationsTodayStream();
       });
     });
     // Auto-refresh duration every minute
@@ -616,9 +618,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildVacationEmployeesSection(BuildContext context) {
-    final requestProvider = context.watch<RequestProvider>();
-    final vacationEmployees = requestProvider.getEmployeesOnVacationToday();
+    // Use cached stream to prevent data flickering from shared _requests list
+    if (_vacationsTodayStream == null) {
+      // Show data from the initial fetch while stream is being set up
+      final requestProvider = context.watch<RequestProvider>();
+      final vacationEmployees = requestProvider.getEmployeesOnVacationToday();
+      return _buildVacationEmployeesContent(context, vacationEmployees);
+    }
 
+    return StreamBuilder<List<RequestModel>>(
+      stream: _vacationsTodayStream,
+      builder: (context, snapshot) {
+        final vacationEmployees = snapshot.data ?? context.read<RequestProvider>().getEmployeesOnVacationToday();
+        return _buildVacationEmployeesContent(context, vacationEmployees);
+      },
+    );
+  }
+
+  Widget _buildVacationEmployeesContent(BuildContext context, List<RequestModel> vacationEmployees) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
