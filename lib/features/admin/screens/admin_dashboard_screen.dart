@@ -785,7 +785,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   /// Show dialog to assign a substitute employee for the absent employee
-  void _showAssignSubstituteDialog(BuildContext context, RequestModel vacation) {
+  void _showAssignSubstituteDialog(BuildContext context, RequestModel vacation) async {
     final employeeProvider = context.read<EmployeeProvider>();
     final storeProvider = context.read<StoreProvider>();
     final shiftProvider = context.read<ShiftProvider>();
@@ -816,11 +816,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
     selectedStore = vacationStore;
 
-    // Get shifts for the store from ShiftProvider
+    // Fetch shifts for the store if not loaded yet
     List<ShiftModel> availableShifts = shiftProvider.getShiftsByStore(selectedStore.id);
+    if (availableShifts.isEmpty) {
+      await shiftProvider.fetchShifts(selectedStore.id);
+      availableShifts = shiftProvider.getShiftsByStore(selectedStore.id);
+    }
     if (availableShifts.isNotEmpty) {
       selectedShift = availableShifts.first;
     }
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -940,12 +946,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       child: Text(s.name),
                     );
                   }).toList(),
-                  onChanged: (value) {
+                  onChanged: (value) async {
                     setDialogState(() {
                       selectedStore = value;
-                      availableShifts = value != null ? shiftProvider.getShiftsByStore(value.id) : [];
-                      selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
+                      selectedShift = null;
                     });
+                    if (value != null) {
+                      // Fetch shifts if not loaded
+                      var shifts = shiftProvider.getShiftsByStore(value.id);
+                      if (shifts.isEmpty) {
+                        await shiftProvider.fetchShifts(value.id);
+                        shifts = shiftProvider.getShiftsByStore(value.id);
+                      }
+                      setDialogState(() {
+                        availableShifts = shifts;
+                        selectedShift = shifts.isNotEmpty ? shifts.first : null;
+                      });
+                    } else {
+                      setDialogState(() {
+                        availableShifts = [];
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
@@ -1091,7 +1112,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   /// Show dialog to add overtime for any employee (without absent employee)
-  void _showAddOvertimeDialog(BuildContext context) {
+  void _showAddOvertimeDialog(BuildContext context) async {
     final employeeProvider = context.read<EmployeeProvider>();
     final storeProvider = context.read<StoreProvider>();
     final shiftProvider = context.read<ShiftProvider>();
@@ -1117,13 +1138,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       selectedStore = storeProvider.activeStores.first;
     }
 
-    // Get shifts for the selected store
+    // Fetch shifts for the selected store if not loaded
     List<ShiftModel> availableShifts = selectedStore != null
         ? shiftProvider.getShiftsByStore(selectedStore.id)
         : [];
+    if (availableShifts.isEmpty && selectedStore != null) {
+      await shiftProvider.fetchShifts(selectedStore.id);
+      availableShifts = shiftProvider.getShiftsByStore(selectedStore.id);
+    }
     if (availableShifts.isNotEmpty) {
       selectedShift = availableShifts.first;
     }
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -1200,12 +1227,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       child: Text(s.name),
                     );
                   }).toList(),
-                  onChanged: (value) {
+                  onChanged: (value) async {
                     setDialogState(() {
                       selectedStore = value;
-                      availableShifts = value != null ? shiftProvider.getShiftsByStore(value.id) : [];
-                      selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
+                      selectedShift = null;
                     });
+                    if (value != null) {
+                      // Fetch shifts if not loaded
+                      var shifts = shiftProvider.getShiftsByStore(value.id);
+                      if (shifts.isEmpty) {
+                        await shiftProvider.fetchShifts(value.id);
+                        shifts = shiftProvider.getShiftsByStore(value.id);
+                      }
+                      setDialogState(() {
+                        availableShifts = shifts;
+                        selectedShift = shifts.isNotEmpty ? shifts.first : null;
+                      });
+                    } else {
+                      setDialogState(() {
+                        availableShifts = [];
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 16),

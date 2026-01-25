@@ -507,7 +507,7 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
   }
 
   /// Show dialog to assign a substitute employee for the absent employee
-  void _showAssignSubstituteDialog(BuildContext context, RequestModel vacation) {
+  void _showAssignSubstituteDialog(BuildContext context, RequestModel vacation) async {
     final employeeProvider = context.read<EmployeeProvider>();
     final storeProvider = context.read<StoreProvider>();
     final shiftProvider = context.read<ShiftProvider>();
@@ -538,11 +538,17 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
     );
     selectedStore = vacationStore;
 
-    // Get shifts for the store from ShiftProvider
+    // Fetch shifts for the store if not loaded yet
     List<ShiftModel> availableShifts = shiftProvider.getShiftsByStore(selectedStore.id);
+    if (availableShifts.isEmpty) {
+      await shiftProvider.fetchShifts(selectedStore.id);
+      availableShifts = shiftProvider.getShiftsByStore(selectedStore.id);
+    }
     if (availableShifts.isNotEmpty) {
       selectedShift = availableShifts.first;
     }
+
+    if (!context.mounted) return;
 
     showDialog(
       context: context,
@@ -662,12 +668,27 @@ class _VacationEmployeesByStoreScreenState extends State<VacationEmployeesByStor
                       child: Text(s.name),
                     );
                   }).toList(),
-                  onChanged: (value) {
+                  onChanged: (value) async {
                     setDialogState(() {
                       selectedStore = value;
-                      availableShifts = value != null ? shiftProvider.getShiftsByStore(value.id) : [];
-                      selectedShift = availableShifts.isNotEmpty ? availableShifts.first : null;
+                      selectedShift = null;
                     });
+                    if (value != null) {
+                      // Fetch shifts if not loaded
+                      var shifts = shiftProvider.getShiftsByStore(value.id);
+                      if (shifts.isEmpty) {
+                        await shiftProvider.fetchShifts(value.id);
+                        shifts = shiftProvider.getShiftsByStore(value.id);
+                      }
+                      setDialogState(() {
+                        availableShifts = shifts;
+                        selectedShift = shifts.isNotEmpty ? shifts.first : null;
+                      });
+                    } else {
+                      setDialogState(() {
+                        availableShifts = [];
+                      });
+                    }
                   },
                 ),
                 const SizedBox(height: 16),
