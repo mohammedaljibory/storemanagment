@@ -347,6 +347,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
       case RequestType.shiftChange:
         typeIcon = Icons.swap_horiz;
         break;
+      case RequestType.vacationCancellation:
+        typeIcon = Icons.event_busy;
+        break;
     }
 
     return GlassContainer(
@@ -476,6 +479,25 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.errorColor,
                   side: const BorderSide(color: AppTheme.errorColor),
+                ),
+              ),
+            ),
+          ],
+
+          // Request cancellation button for approved vacations (only for future vacations)
+          if (request.status == RequestStatus.approved &&
+              request.type == RequestType.fullDayOff &&
+              request.targetDate.isAfter(DateTime.now().subtract(const Duration(days: 1)))) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showCancellationRequestDialog(request),
+                icon: const Icon(Icons.event_busy, size: 18),
+                label: const Text('طلب إلغاء الإجازة'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.orange,
+                  side: const BorderSide(color: Colors.orange),
                 ),
               ),
             ),
@@ -1034,5 +1056,160 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
         );
       }
     }
+  }
+
+  /// Show dialog to request cancellation of an approved vacation
+  void _showCancellationRequestDialog(RequestModel vacation) {
+    final reasonController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.event_busy, color: Colors.orange),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text('طلب إلغاء إجازة', style: TextStyle(fontSize: 16)),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Vacation info
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_today, size: 16, color: AppTheme.primaryColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'الإجازة المراد إلغاؤها',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      vacation.isMultiDay ? vacation.dateRangeText : vacation.formattedTargetDate,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (vacation.totalDays != null)
+                      Text(
+                        '${vacation.totalDays} أيام',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Info message
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'سيتم إرسال طلب الإلغاء للمدير للموافقة عليه.\nفي حال الموافقة، سيُسترد رصيد الإجازات.',
+                        style: TextStyle(fontSize: 11, color: Colors.orange),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Reason
+              const Text('سبب الإلغاء:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'اكتب سبب طلب الإلغاء...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              if (reasonController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('يرجى كتابة سبب الإلغاء')),
+                );
+                return;
+              }
+
+              Navigator.pop(context);
+
+              final success = await context.read<RequestProvider>().createCancellationRequest(
+                originalVacation: vacation,
+                reason: reasonController.text.trim(),
+              );
+
+              if (success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('تم إرسال طلب الإلغاء للمدير'),
+                    backgroundColor: AppTheme.successColor,
+                  ),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(context.read<RequestProvider>().errorMessage ?? 'فشل في إرسال الطلب'),
+                    backgroundColor: AppTheme.errorColor,
+                  ),
+                );
+              }
+            },
+            icon: const Icon(Icons.send, size: 18),
+            label: const Text('إرسال الطلب'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -244,6 +244,35 @@ class RequestProvider extends ChangeNotifier {
           final daysUsed = _requests[index].totalDays ?? 1;
           await _updateVacationBalance(_requests[index].employeeId, daysUsed);
         }
+
+        // Handle vacation cancellation approval
+        if (_requests[index].type == RequestType.vacationCancellation) {
+          final originalRequestId = _requests[index].originalRequestId;
+          if (originalRequestId != null) {
+            // Get the original vacation request
+            final originalRequest = await getOriginalRequest(originalRequestId);
+            if (originalRequest != null) {
+              // Cancel the original vacation
+              await _firestore.collection('requests').doc(originalRequestId).update({
+                'status': 'cancelled',
+              });
+
+              // Update local list if present
+              final originalIndex = _requests.indexWhere((r) => r.id == originalRequestId);
+              if (originalIndex != -1) {
+                _requests[originalIndex] = _requests[originalIndex].copyWith(
+                  status: RequestStatus.cancelled,
+                );
+              }
+
+              // Restore vacation balance
+              final daysToRestore = originalRequest.totalDays ?? 1;
+              await _restoreVacationBalance(_requests[index].employeeId, daysToRestore);
+
+              print('Vacation cancellation approved: restored $daysToRestore days');
+            }
+          }
+        }
       }
 
       _isLoading = false;
@@ -486,6 +515,116 @@ class RequestProvider extends ChangeNotifier {
       });
     } catch (e) {
       print('Error updating vacation balance: $e');
+    }
+  }
+
+  /// Restore employee vacation balance after cancellation approval
+  Future<void> _restoreVacationBalance(String employeeId, int daysToRestore) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(employeeId).get();
+      if (!userDoc.exists) return;
+
+      final currentYear = DateTime.now().year;
+      final data = userDoc.data()!;
+      final storedYear = data['vacationYear'] as int? ?? currentYear;
+      int currentUsed = data['usedVacationDays'] as int? ?? 0;
+
+      // Reset if year changed
+      if (storedYear != currentYear) {
+        currentUsed = 0;
+      }
+
+      // Restore days (subtract from used)
+      final newUsed = (currentUsed - daysToRestore).clamp(0, currentUsed);
+
+      await _firestore.collection('users').doc(employeeId).update({
+        'usedVacationDays': newUsed,
+        'vacationYear': currentYear,
+      });
+
+      print('Restored $daysToRestore vacation days for employee $employeeId');
+    } catch (e) {
+      print('Error restoring vacation balance: $e');
+    }
+  }
+
+  /// Create a vacation cancellation request
+  Future<bool> createCancellationRequest({
+    required RequestModel originalVacation,
+    required String reason,
+  }) async {
+    if (originalVacation.type != RequestType.fullDayOff ||
+        originalVacation.status != RequestStatus.approved) {
+      _errorMessage = 'يمكن إلغاء الإجازات المعتمدة فقط';
+      notifyListeners();
+      return false;
+    }
+
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final cancellationRequest = RequestModel(
+        id: '',
+        employeeId: originalVacation.employeeId,
+        employeeName: originalVacation.employeeName,
+        storeId: originalVacation.storeId,
+        storeName: originalVacation.storeName,
+        type: RequestType.vacationCancellation,
+        requestDate: DateTime.now(),
+        targetDate: originalVacation.targetDate,
+        endDate: originalVacation.endDate,
+        totalDays: originalVacation.totalDays,
+        reason: reason,
+        originalRequestId: originalVacation.id,
+      );
+
+      // Add to Firestore
+      final docRef = await _firestore.collection('requests').add(cancellationRequest.toJson());
+      await docRef.update({'id': docRef.id});
+
+      final newRequest = cancellationRequest.copyWith(id: docRef.id);
+      _requests.insert(0, newRequest);
+
+      // Send notification to admin
+      await _firestore.collection('notifications').add({
+        'type': 'vacation_cancellation_request',
+        'title': 'طلب إلغاء إجازة 🔄',
+        'body': '${originalVacation.employeeName} يطلب إلغاء إجازته (${originalVacation.dateRangeText})',
+        'employeeId': originalVacation.employeeId,
+        'employeeName': originalVacation.employeeName,
+        'requestId': docRef.id,
+        'originalRequestId': originalVacation.id,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'فشل في إرسال طلب الإلغاء: $e';
+      notifyListeners();
+      print('Error creating cancellation request: $e');
+      return false;
+    }
+  }
+
+  /// Get original request by ID
+  Future<RequestModel?> getOriginalRequest(String requestId) async {
+    try {
+      final doc = await _firestore.collection('requests').doc(requestId).get();
+      if (!doc.exists) return null;
+
+      final data = doc.data()!;
+      data['id'] = doc.id;
+      _convertTimestamps(data);
+      return RequestModel.fromJson(data);
+    } catch (e) {
+      print('Error getting original request: $e');
+      return null;
     }
   }
 

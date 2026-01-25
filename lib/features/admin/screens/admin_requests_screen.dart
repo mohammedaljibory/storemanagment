@@ -311,6 +311,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
       case RequestType.shiftChange:
         typeIcon = Icons.swap_horiz;
         break;
+      case RequestType.vacationCancellation:
+        typeIcon = Icons.event_busy;
+        break;
     }
 
     return GlassContainer(
@@ -430,6 +433,12 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
               ],
             ),
           ),
+
+          // Original vacation info for cancellation requests
+          if (request.type == RequestType.vacationCancellation && request.originalRequestId != null) ...[
+            const SizedBox(height: 8),
+            _buildOriginalVacationInfo(request.originalRequestId!),
+          ],
 
           // Request date
           const SizedBox(height: 8),
@@ -998,6 +1007,148 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
           );
         },
       ),
+    );
+  }
+
+  Widget _buildOriginalVacationInfo(String originalRequestId) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('requests').doc(originalRequestId).get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.warningColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
+            ),
+            child: const Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('جاري تحميل بيانات الإجازة الأصلية...'),
+              ],
+            ),
+          );
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.errorColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.errorColor.withOpacity(0.3)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.warning, color: AppTheme.errorColor, size: 18),
+                SizedBox(width: 8),
+                Text('لم يتم العثور على الإجازة الأصلية'),
+              ],
+            ),
+          );
+        }
+
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        data['id'] = snapshot.data!.id;
+
+        // Convert timestamps
+        if (data['requestDate'] is Timestamp) {
+          data['requestDate'] = (data['requestDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['targetDate'] is Timestamp) {
+          data['targetDate'] = (data['targetDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['endDate'] is Timestamp) {
+          data['endDate'] = (data['endDate'] as Timestamp).toDate().toIso8601String();
+        }
+        if (data['respondedAt'] is Timestamp) {
+          data['respondedAt'] = (data['respondedAt'] as Timestamp).toDate().toIso8601String();
+        }
+
+        final originalRequest = RequestModel.fromJson(data);
+
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppTheme.warningColor.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.warningColor.withOpacity(0.3)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.event_note, color: AppTheme.warningColor, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'الإجازة المطلوب إلغاؤها:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDarkMode ? Colors.white70 : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    originalRequest.dateRangeText,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              if (originalRequest.totalDays != null && originalRequest.totalDays! > 1) ...[
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.timelapse, size: 14, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${originalRequest.totalDays} أيام',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(
+                    originalRequest.status == RequestStatus.approved
+                        ? Icons.check_circle
+                        : Icons.hourglass_empty,
+                    size: 14,
+                    color: originalRequest.status == RequestStatus.approved
+                        ? AppTheme.successColor
+                        : Colors.grey,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'الحالة: ${originalRequest.statusText}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: originalRequest.status == RequestStatus.approved
+                          ? AppTheme.successColor
+                          : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

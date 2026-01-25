@@ -3,6 +3,7 @@ enum RequestType {
   timeOff,    // زمنية - partial day off
   fullDayOff, // إجازة يوم كامل - full day leave
   shiftChange, // تغيير شفت - temporary shift change
+  vacationCancellation, // طلب إلغاء إجازة - vacation cancellation request
 }
 
 /// Request status
@@ -46,6 +47,9 @@ class RequestModel {
   final String? newShiftName;      // اسم الشفت الجديد
   final bool isActive;
 
+  // ============ VACATION CANCELLATION FIELDS ============
+  final String? originalRequestId; // معرف الطلب الأصلي (لطلبات إلغاء الإجازة)
+
   // ============ TIME-OFF MONITORING FIELDS ============
   final bool isBeforeShift;        // هل الزمنية قبل بداية الدوام؟
   final String? expectedReturnTime; // وقت العودة المتوقع (مثل "10:00")
@@ -76,6 +80,7 @@ class RequestModel {
     this.newShiftId,
     this.newShiftName,
     this.isActive = true,
+    this.originalRequestId,
     this.isBeforeShift = false,
     this.expectedReturnTime,
     this.graceMinutes = 15,
@@ -115,6 +120,7 @@ class RequestModel {
       newShiftId: json['newShiftId'] as String?,
       newShiftName: json['newShiftName'] as String?,
       isActive: json['isActive'] as bool? ?? true,
+      originalRequestId: json['originalRequestId'] as String?,
       isBeforeShift: json['isBeforeShift'] as bool? ?? false,
       expectedReturnTime: json['expectedReturnTime'] as String?,
       graceMinutes: json['graceMinutes'] as int? ?? 15,
@@ -152,6 +158,7 @@ class RequestModel {
       'newShiftId': newShiftId,
       'newShiftName': newShiftName,
       'isActive': isActive,
+      'originalRequestId': originalRequestId,
       'isBeforeShift': isBeforeShift,
       'expectedReturnTime': expectedReturnTime,
       'graceMinutes': graceMinutes,
@@ -183,6 +190,7 @@ class RequestModel {
     String? newShiftId,
     String? newShiftName,
     bool? isActive,
+    String? originalRequestId,
     bool? isBeforeShift,
     String? expectedReturnTime,
     int? graceMinutes,
@@ -212,6 +220,7 @@ class RequestModel {
       newShiftId: newShiftId ?? this.newShiftId,
       newShiftName: newShiftName ?? this.newShiftName,
       isActive: isActive ?? this.isActive,
+      originalRequestId: originalRequestId ?? this.originalRequestId,
       isBeforeShift: isBeforeShift ?? this.isBeforeShift,
       expectedReturnTime: expectedReturnTime ?? this.expectedReturnTime,
       graceMinutes: graceMinutes ?? this.graceMinutes,
@@ -230,8 +239,13 @@ class RequestModel {
         return 'إجازة يوم كامل';
       case RequestType.shiftChange:
         return 'تغيير شفت';
+      case RequestType.vacationCancellation:
+        return 'طلب إلغاء إجازة';
     }
   }
+
+  /// Check if this is a vacation cancellation request
+  bool get isVacationCancellation => type == RequestType.vacationCancellation;
 
   String get statusText {
     switch (status) {
