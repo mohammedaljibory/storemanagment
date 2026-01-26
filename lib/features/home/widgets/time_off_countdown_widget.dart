@@ -39,13 +39,14 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
   bool _timeOffEnded = false;
   double _currentDistance = 0;
   StoreModel? _store;
+  bool _locationCheckStarted = false; // Track if we started location monitoring
 
   @override
   void initState() {
     super.initState();
     _calculateRemainingTime();
     _startCountdown();
-    _loadStoreAndCheckLocation();
+    _loadStore(); // Only load store info, don't check location yet
   }
 
   @override
@@ -79,8 +80,14 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
         _calculateRemainingTime();
       });
 
-      // Check location every 30 seconds
-      if (timer.tick % 30 == 0) {
+      // Only start checking location AFTER time-off ends
+      if (_timeOffEnded && !_locationCheckStarted) {
+        _locationCheckStarted = true;
+        _checkCurrentLocation();
+      }
+
+      // Continue checking location every 15 seconds after time-off ends
+      if (_timeOffEnded && _locationCheckStarted && timer.tick % 15 == 0) {
         _checkCurrentLocation();
       }
 
@@ -91,13 +98,12 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
     });
   }
 
-  Future<void> _loadStoreAndCheckLocation() async {
+  Future<void> _loadStore() async {
     final storeProvider = context.read<StoreProvider>();
     _store = storeProvider.getStoreById(widget.timeOff.storeId);
     if (_store == null) {
       _store = await storeProvider.fetchStoreById(widget.timeOff.storeId);
     }
-    await _checkCurrentLocation();
   }
 
   Future<void> _checkCurrentLocation() async {
@@ -297,49 +303,50 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
               ),
             ),
 
-            const SizedBox(height: 16),
-
-            // Location Status
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: (_isInRange ? Colors.green : Colors.red).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: (_isInRange ? Colors.green : Colors.red).withOpacity(0.3),
+            // Location Status - Only show after time-off ends
+            if (_timeOffEnded) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: (_isInRange ? Colors.green : Colors.red).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: (_isInRange ? Colors.green : Colors.red).withOpacity(0.3),
+                  ),
                 ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_isCheckingLocation)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    Icon(
-                      _isInRange ? Icons.location_on : Icons.location_off,
-                      color: _isInRange ? Colors.green : Colors.red,
-                      size: 20,
-                    ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      _isInRange
-                          ? 'أنت داخل نطاق المتجر ✓'
-                          : 'خارج النطاق (${_currentDistance.toStringAsFixed(0)}م)',
-                      style: TextStyle(
-                        color: _isInRange ? Colors.green.shade700 : Colors.red.shade700,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (_isCheckingLocation)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else
+                      Icon(
+                        _isInRange ? Icons.location_on : Icons.location_off,
+                        color: _isInRange ? Colors.green : Colors.red,
+                        size: 20,
+                      ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _isInRange
+                            ? 'أنت داخل نطاق المتجر ✓'
+                            : 'خارج النطاق (${_currentDistance.toStringAsFixed(0)}م)',
+                        style: TextStyle(
+                          color: _isInRange ? Colors.green.shade700 : Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+            ],
 
             // Auto check-in hint
             if (_timeOffEnded && _isInRange) ...[
