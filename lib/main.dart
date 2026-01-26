@@ -19,6 +19,7 @@ import 'features/splash/screens/splash_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/fcm_service.dart';
+import 'core/services/offline_sync_manager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +45,9 @@ void main() async {
   // Initialize FCM for push notifications
   await FCMService.init();
 
+  // Initialize offline sync manager
+  await OfflineSyncManager.initialize();
+
   // await FirebaseSeeder.seedAll();
   runApp(MyApp(prefs: prefs));
 }
@@ -66,9 +70,16 @@ class _MyAppState extends State<MyApp> {
 
   /// Setup connectivity listener to sync offline data
   void _setupConnectivityListener() {
-    Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
-      if (result != ConnectivityResult.none) {
-        // Connection restored - try to sync offline data
+    Connectivity().onConnectivityChanged.listen((result) {
+      // Handle both single result (old API) and list (new API)
+      final isConnected = result is List
+          ? !result.contains(ConnectivityResult.none)
+          : result != ConnectivityResult.none;
+
+      if (isConnected) {
+        // Connection restored - sync all offline data
+        OfflineSyncManager.syncAllPendingData();
+        // Also sync attendance-specific offline data
         final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
         attendanceProvider.syncOfflineData();
       }

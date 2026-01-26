@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'offline_sync_manager.dart';
 
 /// Service to monitor shift end times and auto checkout employees
 /// who forget to manually check out after their shift ends.
@@ -53,9 +54,19 @@ class ShiftEndMonitorService {
 
   /// Check all active attendance sessions and auto checkout if needed
   /// This can be called periodically or on demand
+  /// Works offline - queues operations for later sync
   static Future<int> checkAndAutoCheckout({int? graceMinutes}) async {
     final grace = graceMinutes ?? defaultGraceMinutes;
     int autoCheckedOutCount = 0;
+
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
+
+    if (!isOnline) {
+      print('📴 Offline - cannot check active attendance from Firestore');
+      // Try to sync any pending offline checkouts
+      return autoCheckedOutCount;
+    }
 
     try {
       final now = DateTime.now();
@@ -162,6 +173,7 @@ class ShiftEndMonitorService {
   }
 
   /// Auto checkout a specific employee
+  /// Falls back to offline queue if update fails
   static Future<bool> _autoCheckoutEmployee({
     required QueryDocumentSnapshot doc,
     required Map<String, dynamic> data,
@@ -169,34 +181,34 @@ class ShiftEndMonitorService {
     required DateTime expectedEnd,
     required DateTime now,
   }) async {
+    final userId = data['userId'] as String?;
+    final userName = data['userName'] as String?;
+    final storeName = data['storeName'] as String?;
+    final storeId = data['storeId'] as String?;
+
+    // Calculate total hours
+    double totalHours = now.difference(checkIn).inMinutes / 60.0;
+
+    // Subtract break time if any
+    final breakMinutes = (data['totalBreakMinutes'] as int?) ?? 0;
+    if (breakMinutes > 0) {
+      totalHours -= (breakMinutes / 60.0);
+      if (totalHours < 0) totalHours = 0;
+    }
+
+    // Get time-off minutes if any
+    int totalTimeOffMinutes = 0;
     try {
-      final userId = data['userId'] as String?;
-      final userName = data['userName'] as String?;
-      final storeName = data['storeName'] as String?;
-      final storeId = data['storeId'] as String?;
-
-      // Calculate total hours
-      double totalHours = now.difference(checkIn).inMinutes / 60.0;
-
-      // Subtract break time if any
-      final breakMinutes = (data['totalBreakMinutes'] as int?) ?? 0;
-      if (breakMinutes > 0) {
-        totalHours -= (breakMinutes / 60.0);
-        if (totalHours < 0) totalHours = 0;
+      final timeOffMinutes = data['totalTimeOffMinutes'];
+      if (timeOffMinutes != null) {
+        totalTimeOffMinutes = timeOffMinutes as int;
       }
+    } catch (_) {}
 
-      // Get time-off minutes if any
-      int totalTimeOffMinutes = 0;
-      try {
-        final timeOffMinutes = data['totalTimeOffMinutes'];
-        if (timeOffMinutes != null) {
-          totalTimeOffMinutes = timeOffMinutes as int;
-        }
-      } catch (_) {}
+    // Calculate how late they are (in minutes after expected end)
+    final lateCheckoutMinutes = now.difference(expectedEnd).inMinutes;
 
-      // Calculate how late they are (in minutes after expected end)
-      final lateCheckoutMinutes = now.difference(expectedEnd).inMinutes;
-
+    try {
       // Update attendance record
       await doc.reference.update({
         'checkOut': now.toIso8601String(),
@@ -231,8 +243,27 @@ class ShiftEndMonitorService {
 
       return true;
     } catch (e) {
-      print('Error auto checking out employee: $e');
-      return false;
+      print('Error auto checking out employee, queuing for offline sync: $e');
+
+      // Queue for offline sync
+      await OfflineSyncManager.addShiftEndToQueue(
+        attendanceId: doc.id,
+        userId: userId ?? '',
+        userName: userName ?? 'غير معروف',
+        storeName: storeName ?? 'غير معروف',
+        checkoutTime: now,
+        totalHours: totalHours,
+        lateMinutes: lateCheckoutMinutes,
+      );
+
+      // Still send local notification to employee
+      await _sendAutoCheckoutNotification(
+        userName: userName ?? 'موظف',
+        storeName: storeName ?? 'المتجر',
+        totalHours: totalHours,
+      );
+
+      return true; // Consider it success since we queued it
     }
   }
 

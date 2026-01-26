@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/attendance_model.dart';
 import 'notification_service.dart';
 import 'location_monitor_service.dart';
+import 'offline_sync_manager.dart';
 
 /// Break request status
 enum BreakRequestStatus { pending, approved, rejected, completed, cancelled }
@@ -67,6 +68,7 @@ class BreakService extends ChangeNotifier {
   }
 
   /// Request break (sends to admin for approval)
+  /// Works offline - queues request for sync when connection is restored
   Future<bool> requestBreak({
     required String attendanceId,
     required String userId,
@@ -78,57 +80,90 @@ class BreakService extends ChangeNotifier {
       return false;
     }
 
-    try {
-      final now = DateTime.now();
+    final now = DateTime.now();
+    final requestData = {
+      'attendanceId': attendanceId,
+      'userId': userId,
+      'userName': userName,
+      'storeId': storeId,
+      'storeName': storeName,
+      'requestedAt': now.toIso8601String(),
+      'status': 'pending',
+      'allowedMinutes': allowedBreakMinutes,
+    };
 
-      // Create break request in Firestore
-      final docRef = await _firestore.collection('break_requests').add({
-        'attendanceId': attendanceId,
-        'userId': userId,
-        'userName': userName,
-        'storeId': storeId,
-        'storeName': storeName,
-        'requestedAt': now.toIso8601String(),
-        'status': 'pending',
-        'allowedMinutes': allowedBreakMinutes,
-      });
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
 
-      _pendingRequestId = docRef.id;
-      _hasPendingRequest = true;
-      _currentAttendanceId = attendanceId;
-      _currentUserId = userId;
-      _currentUserName = userName;
-      _requestStatus = BreakRequestStatus.pending;
+    if (isOnline) {
+      try {
+        // Online: Create break request in Firestore
+        final docRef = await _firestore.collection('break_requests').add(requestData);
 
-      // Notify admin about break request
-      await _firestore.collection('notifications').add({
-        'type': 'break_request',
-        'title': 'طلب استراحة',
-        'body': '$userName يطلب استراحة لمدة $allowedBreakMinutes دقيقة',
-        'userId': userId,
-        'userName': userName,
-        'storeId': storeId,
-        'storeName': storeName,
-        'breakRequestId': docRef.id,
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
-        'forAdmin': true,
-      });
+        _pendingRequestId = docRef.id;
+        _hasPendingRequest = true;
+        _currentAttendanceId = attendanceId;
+        _currentUserId = userId;
+        _currentUserName = userName;
+        _requestStatus = BreakRequestStatus.pending;
 
-      // Show notification to employee
-      await NotificationService.showNotification(
-        id: 9100,
-        title: 'تم إرسال طلب الاستراحة',
-        body: 'بانتظار موافقة المدير',
-        channelId: 'break_channel',
-        channelName: 'Break Notifications',
-      );
+        // Notify admin about break request
+        await _firestore.collection('notifications').add({
+          'type': 'break_request',
+          'title': 'طلب استراحة',
+          'body': '$userName يطلب استراحة لمدة $allowedBreakMinutes دقيقة',
+          'userId': userId,
+          'userName': userName,
+          'storeId': storeId,
+          'storeName': storeName,
+          'breakRequestId': docRef.id,
+          'createdAt': FieldValue.serverTimestamp(),
+          'read': false,
+          'forAdmin': true,
+        });
 
-      notifyListeners();
-      return true;
-    } catch (e) {
-      return false;
+        // Show notification to employee
+        await NotificationService.showNotification(
+          id: 9100,
+          title: 'تم إرسال طلب الاستراحة',
+          body: 'بانتظار موافقة المدير',
+          channelId: 'break_channel',
+          channelName: 'Break Notifications',
+        );
+
+        notifyListeners();
+        return true;
+      } catch (e) {
+        print('Error requesting break online: $e');
+        // Fall through to offline handling
+      }
     }
+
+    // Offline or online failed: Queue for later sync
+    await OfflineSyncManager.addBreakToQueue(
+      operation: 'request',
+      data: requestData,
+    );
+
+    // Set local state with temporary ID
+    _pendingRequestId = 'offline_${now.millisecondsSinceEpoch}';
+    _hasPendingRequest = true;
+    _currentAttendanceId = attendanceId;
+    _currentUserId = userId;
+    _currentUserName = userName;
+    _requestStatus = BreakRequestStatus.pending;
+
+    // Show notification to employee
+    await NotificationService.showNotification(
+      id: 9100,
+      title: 'تم حفظ طلب الاستراحة (بدون إنترنت)',
+      body: 'سيتم إرسال الطلب عند استعادة الاتصال',
+      channelId: 'break_channel',
+      channelName: 'Break Notifications',
+    );
+
+    notifyListeners();
+    return true;
   }
 
   /// Admin approves break request
@@ -207,6 +242,7 @@ class BreakService extends ChangeNotifier {
   }
 
   /// Start break after admin approval (called by employee or auto-triggered)
+  /// Works offline - saves state locally and syncs when online
   Future<bool> startApprovedBreak({
     required String attendanceId,
     required String userId,
@@ -216,46 +252,77 @@ class BreakService extends ChangeNotifier {
       return false;
     }
 
-    try {
-      final now = DateTime.now();
-      _breakStartTime = now;
-      _isOnBreak = true;
-      _hasPendingRequest = false;
-      _currentAttendanceId = attendanceId;
-      _currentUserId = userId;
-      _currentUserName = userName;
-      _remainingSeconds = allowedBreakMinutes * 60;
-      _requestStatus = BreakRequestStatus.approved;
+    final now = DateTime.now();
+    _breakStartTime = now;
+    _isOnBreak = true;
+    _hasPendingRequest = false;
+    _currentAttendanceId = attendanceId;
+    _currentUserId = userId;
+    _currentUserName = userName;
+    _remainingSeconds = allowedBreakMinutes * 60;
+    _requestStatus = BreakRequestStatus.approved;
 
-      // Update Firestore
-      await _firestore.collection('attendance').doc(attendanceId).update({
-        'breakStartTime': now.toIso8601String(),
-        'isOnBreak': true,
-      });
+    // Save active break state locally (works offline)
+    await OfflineSyncManager.saveActiveBreakState(
+      attendanceId: attendanceId,
+      userId: userId,
+      userName: userName,
+      startTime: now,
+      allowedMinutes: allowedBreakMinutes,
+    );
 
-      // Pause location monitoring
-      LocationMonitorService.pauseForBreak();
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
 
-      // Start countdown timer
-      _startBreakTimer();
-
-      // Schedule warning notification (5 min before break ends)
-      _scheduleWarningNotification();
-
-      // Show break started notification
-      await NotificationService.showNotification(
-        id: 9101,
-        title: 'بدأت الاستراحة',
-        body: 'لديك $allowedBreakMinutes دقيقة استراحة\nسيتم تنبيهك قبل انتهائها',
-        channelId: 'break_channel',
-        channelName: 'Break Notifications',
+    if (isOnline) {
+      try {
+        // Update Firestore
+        await _firestore.collection('attendance').doc(attendanceId).update({
+          'breakStartTime': now.toIso8601String(),
+          'isOnBreak': true,
+        });
+      } catch (e) {
+        print('Error updating Firestore for break start: $e');
+        // Queue for later sync
+        await OfflineSyncManager.addBreakToQueue(
+          operation: 'start',
+          data: {
+            'attendanceId': attendanceId,
+            'startTime': now.toIso8601String(),
+          },
+        );
+      }
+    } else {
+      // Offline: Queue for later sync
+      await OfflineSyncManager.addBreakToQueue(
+        operation: 'start',
+        data: {
+          'attendanceId': attendanceId,
+          'startTime': now.toIso8601String(),
+        },
       );
-
-      notifyListeners();
-      return true;
-    } catch (e) {
-      return false;
     }
+
+    // Pause location monitoring
+    LocationMonitorService.pauseForBreak();
+
+    // Start countdown timer
+    _startBreakTimer();
+
+    // Schedule warning notification (5 min before break ends)
+    _scheduleWarningNotification();
+
+    // Show break started notification
+    await NotificationService.showNotification(
+      id: 9101,
+      title: 'بدأت الاستراحة',
+      body: 'لديك $allowedBreakMinutes دقيقة استراحة\nسيتم تنبيهك قبل انتهائها',
+      channelId: 'break_channel',
+      channelName: 'Break Notifications',
+    );
+
+    notifyListeners();
+    return true;
   }
 
   /// Cancel pending break request
@@ -282,71 +349,109 @@ class BreakService extends ChangeNotifier {
   }
 
   /// End break and return to work
+  /// Works offline - saves locally and syncs when online
   Future<bool> endBreak() async {
     if (!_isOnBreak || _currentAttendanceId == null) {
       return false;
     }
 
-    try {
-      final now = DateTime.now();
-      final breakDuration = now.difference(_breakStartTime!).inMinutes;
-      final overtime = breakDuration > allowedBreakMinutes
-          ? breakDuration - allowedBreakMinutes
-          : 0;
+    final now = DateTime.now();
+    final breakDuration = now.difference(_breakStartTime!).inMinutes;
+    final overtime = breakDuration > allowedBreakMinutes
+        ? breakDuration - allowedBreakMinutes
+        : 0;
 
-      // Update Firestore
-      await _firestore.collection('attendance').doc(_currentAttendanceId).update({
-        'breakEndTime': now.toIso8601String(),
-        'isOnBreak': false,
-        'totalBreakMinutes': breakDuration,
-        'breakOvertimeMinutes': overtime,
-      });
+    final attendanceId = _currentAttendanceId!;
+    final requestId = _pendingRequestId;
 
-      // Update break request if exists
-      if (_pendingRequestId != null) {
-        await _firestore.collection('break_requests').doc(_pendingRequestId).update({
-          'status': 'completed',
-          'completedAt': now.toIso8601String(),
-          'actualDuration': breakDuration,
-          'overtimeMinutes': overtime,
+    // Clear local active break state
+    await OfflineSyncManager.clearActiveBreakState();
+
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
+
+    if (isOnline) {
+      try {
+        // Update Firestore
+        await _firestore.collection('attendance').doc(attendanceId).update({
+          'breakEndTime': now.toIso8601String(),
+          'isOnBreak': false,
+          'totalBreakMinutes': breakDuration,
+          'breakOvertimeMinutes': overtime,
         });
+
+        // Update break request if exists
+        if (requestId != null && !requestId.startsWith('offline_')) {
+          await _firestore.collection('break_requests').doc(requestId).update({
+            'status': 'completed',
+            'completedAt': now.toIso8601String(),
+            'actualDuration': breakDuration,
+            'overtimeMinutes': overtime,
+          });
+        }
+      } catch (e) {
+        print('Error updating Firestore for break end: $e');
+        // Queue for later sync
+        await OfflineSyncManager.addBreakToQueue(
+          operation: 'end',
+          data: {
+            'attendanceId': attendanceId,
+            'endTime': now.toIso8601String(),
+            'totalBreakMinutes': breakDuration,
+            'overtimeMinutes': overtime,
+            'requestId': requestId,
+          },
+        );
       }
-
-      // Resume location monitoring
-      LocationMonitorService.resumeFromBreak();
-
-      // Cancel timers
-      _breakTimer?.cancel();
-      _warningTimer?.cancel();
-      _breakTimer = null;
-      _warningTimer = null;
-
-      // Show notification
-      String message = 'تم إنهاء الاستراحة - مدة الاستراحة: $breakDuration دقيقة';
-      if (overtime > 0) {
-        message += '\nتجاوزت وقت الاستراحة بـ $overtime دقيقة';
-      }
-
-      await NotificationService.showNotification(
-        id: 9102,
-        title: 'انتهت الاستراحة',
-        body: message,
-        channelId: 'break_channel',
-        channelName: 'Break Notifications',
+    } else {
+      // Offline: Queue for later sync
+      await OfflineSyncManager.addBreakToQueue(
+        operation: 'end',
+        data: {
+          'attendanceId': attendanceId,
+          'endTime': now.toIso8601String(),
+          'totalBreakMinutes': breakDuration,
+          'overtimeMinutes': overtime,
+          'requestId': requestId,
+        },
       );
-
-      // Reset state
-      _isOnBreak = false;
-      _breakStartTime = null;
-      _currentAttendanceId = null;
-      _remainingSeconds = 0;
-      _requestStatus = BreakRequestStatus.completed;
-
-      notifyListeners();
-      return true;
-    } catch (e) {
-      return false;
     }
+
+    // Resume location monitoring
+    LocationMonitorService.resumeFromBreak();
+
+    // Cancel timers
+    _breakTimer?.cancel();
+    _warningTimer?.cancel();
+    _breakTimer = null;
+    _warningTimer = null;
+
+    // Show notification
+    String message = 'تم إنهاء الاستراحة - مدة الاستراحة: $breakDuration دقيقة';
+    if (overtime > 0) {
+      message += '\nتجاوزت وقت الاستراحة بـ $overtime دقيقة';
+    }
+    if (!isOnline) {
+      message += '\n(سيتم المزامنة عند استعادة الاتصال)';
+    }
+
+    await NotificationService.showNotification(
+      id: 9102,
+      title: 'انتهت الاستراحة',
+      body: message,
+      channelId: 'break_channel',
+      channelName: 'Break Notifications',
+    );
+
+    // Reset state
+    _isOnBreak = false;
+    _breakStartTime = null;
+    _currentAttendanceId = null;
+    _remainingSeconds = 0;
+    _requestStatus = BreakRequestStatus.completed;
+
+    notifyListeners();
+    return true;
   }
 
   /// Start countdown timer
@@ -442,8 +547,43 @@ class BreakService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Check break status from Firestore (for app restart)
+  /// Check break status from Firestore or local storage (for app restart)
+  /// Works offline - restores break state from local storage
   Future<void> checkBreakStatus(String attendanceId, String userId) async {
+    // First check local storage for active break (works offline)
+    final localBreakState = await OfflineSyncManager.getActiveBreakState();
+    if (localBreakState != null && localBreakState['userId'] == userId) {
+      _isOnBreak = true;
+      _breakStartTime = DateTime.parse(localBreakState['startTime']);
+      _currentAttendanceId = localBreakState['attendanceId'];
+      _currentUserId = userId;
+      _currentUserName = localBreakState['userName'];
+      _requestStatus = BreakRequestStatus.approved;
+
+      // Calculate remaining time
+      final elapsed = DateTime.now().difference(_breakStartTime!).inSeconds;
+      final allowed = (localBreakState['allowedMinutes'] as int) * 60;
+      _remainingSeconds = allowed - elapsed;
+      if (_remainingSeconds < 0) _remainingSeconds = 0;
+
+      // Pause location monitoring
+      LocationMonitorService.pauseForBreak();
+
+      // Start timer
+      _startBreakTimer();
+
+      notifyListeners();
+      print('📴 Restored active break from local storage');
+      return;
+    }
+
+    // Check if online
+    final isOnline = await OfflineSyncManager.checkConnectivity();
+    if (!isOnline) {
+      print('📴 Offline - cannot check break status from Firestore');
+      return;
+    }
+
     try {
       // Check for pending break request
       final pendingRequests = await _firestore
@@ -479,6 +619,15 @@ class BreakService extends ChangeNotifier {
           _remainingSeconds = allowed - elapsed;
           if (_remainingSeconds < 0) _remainingSeconds = 0;
 
+          // Save to local storage for offline recovery
+          await OfflineSyncManager.saveActiveBreakState(
+            attendanceId: attendanceId,
+            userId: userId,
+            userName: _currentUserName ?? 'Unknown',
+            startTime: _breakStartTime!,
+            allowedMinutes: allowedBreakMinutes,
+          );
+
           // Pause location monitoring
           LocationMonitorService.pauseForBreak();
 
@@ -489,7 +638,7 @@ class BreakService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      // Silent fail
+      print('Error checking break status: $e');
     }
   }
 

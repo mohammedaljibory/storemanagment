@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/request_model.dart';
 import 'notification_service.dart';
+import 'offline_sync_manager.dart';
 
 /// Service to monitor time-off requests and track employee return
 /// - Sends reminder before time-off ends
@@ -37,6 +38,7 @@ class TimeOffMonitorService {
   static RequestModel? get activeTimeOff => _activeTimeOff;
 
   /// Start monitoring a time-off request
+  /// Works offline - saves state locally for recovery
   static Future<void> startMonitoring({
     required String userId,
     required RequestModel timeOffRequest,
@@ -60,13 +62,31 @@ class TimeOffMonitorService {
     print('⏰ Expected return: ${timeOffRequest.expectedReturnTime}');
     print('⏰ Grace period: ${timeOffRequest.graceMinutes} minutes');
 
-    // Update status to active
-    await _updateTimeOffStatus(TimeOffReturnStatus.active);
+    // Save state locally for offline recovery
+    await OfflineSyncManager.saveActiveTimeOffState(
+      requestId: timeOffRequest.id,
+      userId: userId,
+      userName: timeOffRequest.employeeName,
+      expectedReturnTime: timeOffRequest.expectedReturnTime ?? '',
+      graceMinutes: timeOffRequest.graceMinutes,
+      startTime: timeOffRequest.startTime ?? '',
+      endTime: timeOffRequest.endTime ?? '',
+    );
 
-    // Notify admin that time-off started
-    await _notifyAdminTimeOffStarted();
+    // Check connectivity before Firestore operations
+    final isOnline = await OfflineSyncManager.checkConnectivity();
 
-    // Start periodic check (every minute)
+    if (isOnline) {
+      // Update status to active
+      await _updateTimeOffStatus(TimeOffReturnStatus.active);
+
+      // Notify admin that time-off started
+      await _notifyAdminTimeOffStarted();
+    } else {
+      print('⏰ Offline - time-off monitoring will use local timers only');
+    }
+
+    // Start periodic check (every minute) - works offline
     _monitorTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _checkTimeOffStatus();
     });
@@ -84,6 +104,9 @@ class TimeOffMonitorService {
     _activeTimeOff = null;
     _reminderSent = false;
     _returnAlertSent = false;
+
+    // Clear local state
+    await OfflineSyncManager.clearActiveTimeOffState();
 
     print('⏰ Time-off monitoring stopped');
   }
@@ -177,18 +200,43 @@ class TimeOffMonitorService {
   }
 
   /// Block employee, auto checkout, and notify admin
+  /// Works offline - queues operations for sync
   static Future<void> _blockEmployee() async {
     if (_activeTimeOff == null || _currentUserId == null) return;
 
     print('⏰ Blocking employee - grace period exceeded');
 
-    // Update status to blocked
-    await _updateTimeOffStatus(TimeOffReturnStatus.blocked);
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
 
-    // Auto checkout the employee if they have an active session
-    await _autoCheckoutEmployee();
+    if (isOnline) {
+      // Update status to blocked
+      await _updateTimeOffStatus(TimeOffReturnStatus.blocked);
 
-    // Show notification to employee
+      // Auto checkout the employee if they have an active session
+      await _autoCheckoutEmployee();
+
+      // Notify admin
+      await _notifyAdminEmployeeBlocked();
+    } else {
+      // Offline: Queue block operation for later sync
+      await OfflineSyncManager.addTimeOffToQueue(
+        operation: 'block',
+        data: {
+          'requestId': _activeTimeOff!.id,
+          'userId': _currentUserId,
+          'userName': _activeTimeOff!.employeeName,
+          'blockedAt': DateTime.now().toIso8601String(),
+        },
+      );
+
+      // Also queue auto checkout
+      await _autoCheckoutEmployeeOffline();
+
+      print('⏰ Block operation queued for offline sync');
+    }
+
+    // Show notification to employee (works offline)
     await _notifications.show(
       _blockedNotificationId,
       '⛔ تم تسجيل خروجك تلقائياً',
@@ -210,11 +258,32 @@ class TimeOffMonitorService {
       ),
     );
 
-    // Notify admin
-    await _notifyAdminEmployeeBlocked();
-
     // Stop monitoring
     await stopMonitoring();
+  }
+
+  /// Queue auto checkout for offline sync
+  static Future<void> _autoCheckoutEmployeeOffline() async {
+    if (_currentUserId == null || _activeTimeOff == null) return;
+
+    // Get local time-off state to calculate hours
+    final localState = await OfflineSyncManager.getActiveTimeOffState();
+    final now = DateTime.now();
+
+    // Queue the auto checkout operation
+    await OfflineSyncManager.addTimeOffToQueue(
+      operation: 'auto_checkout',
+      data: {
+        'userId': _currentUserId,
+        'userName': _activeTimeOff!.employeeName,
+        'checkoutTime': now.toIso8601String(),
+        'totalTimeOffMinutes': _activeTimeOff?.durationMinutes ?? 0,
+        'notes': 'تسجيل خروج تلقائي - تجاوز فترة السماح للزمنية (بدون إنترنت)',
+        'requestId': _activeTimeOff!.id,
+      },
+    );
+
+    print('⏰ Auto checkout queued for offline sync');
   }
 
   /// Auto checkout employee when grace period is exceeded
@@ -351,36 +420,63 @@ class TimeOffMonitorService {
   }
 
   /// Update time-off request status in Firestore
+  /// Falls back to offline queue if no connection
   static Future<void> _updateTimeOffStatus(TimeOffReturnStatus status, {DateTime? actualReturnTime}) async {
     if (_activeTimeOff == null) return;
 
-    try {
-      final updateData = {
-        'timeOffReturnStatus': status.toString().split('.').last,
-      };
+    final updateData = <String, dynamic>{
+      'timeOffReturnStatus': status.toString().split('.').last,
+    };
 
-      if (actualReturnTime != null) {
-        updateData['actualReturnTime'] = actualReturnTime.toIso8601String();
-      }
-
-      await _firestore
-          .collection('requests')
-          .doc(_activeTimeOff!.id)
-          .update(updateData);
-
-      // Update local reference
-      _activeTimeOff = _activeTimeOff!.copyWith(
-        timeOffReturnStatus: status,
-        actualReturnTime: actualReturnTime,
-      );
-
-      print('⏰ Time-off status updated to: $status');
-    } catch (e) {
-      print('⏰ Error updating time-off status: $e');
+    if (actualReturnTime != null) {
+      updateData['actualReturnTime'] = actualReturnTime.toIso8601String();
     }
+
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
+
+    if (isOnline) {
+      try {
+        await _firestore
+            .collection('requests')
+            .doc(_activeTimeOff!.id)
+            .update(updateData);
+
+        print('⏰ Time-off status updated to: $status');
+      } catch (e) {
+        print('⏰ Error updating time-off status: $e');
+        // Queue for later sync
+        await OfflineSyncManager.addTimeOffToQueue(
+          operation: 'return',
+          data: {
+            'requestId': _activeTimeOff!.id,
+            'status': status.toString().split('.').last,
+            'returnTime': actualReturnTime?.toIso8601String(),
+          },
+        );
+      }
+    } else {
+      // Queue for offline sync
+      await OfflineSyncManager.addTimeOffToQueue(
+        operation: 'return',
+        data: {
+          'requestId': _activeTimeOff!.id,
+          'status': status.toString().split('.').last,
+          'returnTime': actualReturnTime?.toIso8601String(),
+        },
+      );
+      print('⏰ Time-off status update queued for offline sync');
+    }
+
+    // Update local reference
+    _activeTimeOff = _activeTimeOff!.copyWith(
+      timeOffReturnStatus: status,
+      actualReturnTime: actualReturnTime,
+    );
   }
 
   /// Called when employee successfully checks in (returns from time-off)
+  /// Works offline - queues return update for sync
   static Future<void> markAsReturned() async {
     if (_activeTimeOff == null) return;
 
@@ -401,11 +497,100 @@ class TimeOffMonitorService {
       print('⏰ Employee returned on time');
     }
 
-    // Notify admin about return
-    await _notifyAdminEmployeeReturned(onTime: onTime);
+    // Check connectivity
+    final isOnline = await OfflineSyncManager.checkConnectivity();
 
-    await _updateTimeOffStatus(status, actualReturnTime: now);
+    if (isOnline) {
+      // Notify admin about return
+      await _notifyAdminEmployeeReturned(onTime: onTime);
+      await _updateTimeOffStatus(status, actualReturnTime: now);
+    } else {
+      // Queue for offline sync
+      await OfflineSyncManager.addTimeOffToQueue(
+        operation: 'return',
+        data: {
+          'requestId': _activeTimeOff!.id,
+          'status': status.toString().split('.').last,
+          'returnTime': now.toIso8601String(),
+          'onTime': onTime,
+        },
+      );
+      print('⏰ Return status queued for offline sync');
+    }
+
     await stopMonitoring();
+  }
+
+  /// Restore time-off monitoring from local state (for app restart)
+  static Future<void> restoreFromLocalState(String userId) async {
+    final localState = await OfflineSyncManager.getActiveTimeOffState();
+    if (localState == null || localState['userId'] != userId) {
+      return;
+    }
+
+    print('⏰ Restoring time-off monitoring from local state');
+
+    _currentUserId = userId;
+    _isMonitoring = true;
+    _reminderSent = false;
+    _returnAlertSent = false;
+
+    // Create a minimal RequestModel-like state from local data
+    // Note: We don't have full RequestModel, so we'll use local timers only
+    final expectedReturnTime = localState['expectedReturnTime'] as String?;
+    final graceMinutes = localState['graceMinutes'] as int? ?? 15;
+
+    if (expectedReturnTime == null || expectedReturnTime.isEmpty) {
+      print('⏰ Cannot restore - no expected return time');
+      return;
+    }
+
+    // Parse expected return time
+    final parts = expectedReturnTime.split(':');
+    if (parts.length != 2) return;
+
+    final now = DateTime.now();
+    final returnHour = int.tryParse(parts[0]) ?? 0;
+    final returnMinute = int.tryParse(parts[1]) ?? 0;
+    var expectedReturn = DateTime(now.year, now.month, now.day, returnHour, returnMinute);
+
+    // Handle if expected return is before now (might be next day)
+    if (expectedReturn.isBefore(now.subtract(Duration(minutes: graceMinutes + 60)))) {
+      // Time-off is long past - clear state
+      await OfflineSyncManager.clearActiveTimeOffState();
+      _isMonitoring = false;
+      return;
+    }
+
+    final deadline = expectedReturn.add(Duration(minutes: graceMinutes));
+
+    // Start local timer for monitoring
+    _monitorTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      final currentTime = DateTime.now();
+      final minutesUntilReturn = expectedReturn.difference(currentTime).inMinutes;
+      final minutesUntilDeadline = deadline.difference(currentTime).inMinutes;
+
+      print('⏰ Local check: $minutesUntilReturn min until return, $minutesUntilDeadline min until deadline');
+
+      // Send reminder 10 minutes before expected return
+      if (!_reminderSent && minutesUntilReturn <= _reminderMinutesBefore && minutesUntilReturn > 0) {
+        _sendReminderNotification(minutesUntilReturn);
+        _reminderSent = true;
+      }
+
+      // Time-off has ended, employee should return
+      if (minutesUntilReturn <= 0 && !_returnAlertSent) {
+        _sendReturnNotification();
+        _returnAlertSent = true;
+      }
+
+      // Grace period exceeded - block employee
+      if (minutesUntilDeadline <= 0) {
+        _blockEmployee();
+      }
+    });
+
+    print('⏰ Time-off monitoring restored from local state');
   }
 
   /// Check if employee has an active time-off that blocks check-in

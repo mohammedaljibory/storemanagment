@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/store_model.dart';
 import '../models/attendance_model.dart';
 import 'notification_service.dart';
+import 'offline_sync_manager.dart';
 
 /// Service to monitor employee location while checked in
 /// Alerts if employee moves outside the store's monitoring radius
@@ -275,6 +276,7 @@ class LocationMonitorService {
   }
 
   /// Handle when employee is outside the allowed radius
+  /// Works offline - local notifications still work, Firestore notifications queued
   static Future<void> _handleOutsideRadius(double distance, Position position) async {
     // Start tracking time outside radius
     if (_outsideRadiusSince == null) {
@@ -284,12 +286,12 @@ class LocationMonitorService {
 
     final minutesOutside = DateTime.now().difference(_outsideRadiusSince!).inMinutes;
 
-    // Send initial alert
+    // Send initial alert (local notification works offline)
     if (!_alertSent) {
       await _sendDistanceAlert(distance, position);
     }
 
-    // Show warning at 5 minutes
+    // Show warning at 5 minutes (local notification works offline)
     if (minutesOutside >= _warningMinutes && !_warningShown) {
       _warningShown = true;
       await NotificationService.showAlarmNotification(
@@ -298,53 +300,67 @@ class LocationMonitorService {
         body: 'أنت خارج نطاق العمل منذ $minutesOutside دقائق.\nسيتم تسجيل خروجك تلقائياً بعد ${_autoCheckoutMinutes - minutesOutside} دقائق.',
       );
 
-      // Notify admin about warning
-      await _firestore.collection('notifications').add({
-        'type': 'location_warning',
-        'title': 'تحذير: موظف خارج نطاق العمل',
-        'body': '${_currentUserName} خارج نطاق ${_currentStore!.name} منذ $minutesOutside دقائق',
-        'userId': _currentUserId,
-        'userName': _currentUserName,
-        'storeId': _currentStore!.id,
-        'storeName': _currentStore!.name,
-        'distance': distance,
-        'minutesOutside': minutesOutside,
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
-        'forAdmin': true,
-      });
+      // Try to notify admin (may fail if offline)
+      final isOnline = await OfflineSyncManager.checkConnectivity();
+      if (isOnline) {
+        try {
+          await _firestore.collection('notifications').add({
+            'type': 'location_warning',
+            'title': 'تحذير: موظف خارج نطاق العمل',
+            'body': '${_currentUserName} خارج نطاق ${_currentStore!.name} منذ $minutesOutside دقائق',
+            'userId': _currentUserId,
+            'userName': _currentUserName,
+            'storeId': _currentStore!.id,
+            'storeName': _currentStore!.name,
+            'distance': distance,
+            'minutesOutside': minutesOutside,
+            'createdAt': FieldValue.serverTimestamp(),
+            'read': false,
+            'forAdmin': true,
+          });
+        } catch (e) {
+          print('📍 Failed to notify admin about warning: $e');
+        }
+      }
     }
 
     // Auto-checkout at 10 minutes
     if (minutesOutside >= _autoCheckoutMinutes && _onAutoCheckout != null) {
       print('📍 Auto-checkout triggered after $minutesOutside minutes outside radius');
 
-      // Notify before auto-checkout
+      // Notify before auto-checkout (local notification works offline)
       await NotificationService.showAlarmNotification(
         id: 9003,
         title: '🚨 تم تسجيل خروجك تلقائياً',
         body: 'تم تسجيل خروجك من ${_currentStore!.name} لأنك كنت خارج نطاق العمل لأكثر من $_autoCheckoutMinutes دقائق.',
       );
 
-      // Notify admin about auto-checkout
-      await _firestore.collection('notifications').add({
-        'type': 'auto_checkout',
-        'title': 'تسجيل خروج تلقائي',
-        'body': 'تم تسجيل خروج ${_currentUserName} تلقائياً لخروجه عن نطاق ${_currentStore!.name} لأكثر من $_autoCheckoutMinutes دقائق',
-        'userId': _currentUserId,
-        'userName': _currentUserName,
-        'storeId': _currentStore!.id,
-        'storeName': _currentStore!.name,
-        'distance': distance,
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'minutesOutside': minutesOutside,
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
-        'forAdmin': true,
-      });
+      // Try to notify admin (may fail if offline)
+      final isOnline = await OfflineSyncManager.checkConnectivity();
+      if (isOnline) {
+        try {
+          await _firestore.collection('notifications').add({
+            'type': 'auto_checkout',
+            'title': 'تسجيل خروج تلقائي',
+            'body': 'تم تسجيل خروج ${_currentUserName} تلقائياً لخروجه عن نطاق ${_currentStore!.name} لأكثر من $_autoCheckoutMinutes دقائق',
+            'userId': _currentUserId,
+            'userName': _currentUserName,
+            'storeId': _currentStore!.id,
+            'storeName': _currentStore!.name,
+            'distance': distance,
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'minutesOutside': minutesOutside,
+            'createdAt': FieldValue.serverTimestamp(),
+            'read': false,
+            'forAdmin': true,
+          });
+        } catch (e) {
+          print('📍 Failed to notify admin about auto-checkout: $e');
+        }
+      }
 
-      // Execute auto-checkout callback
+      // Execute auto-checkout callback (this will handle offline queueing)
       await _onAutoCheckout!();
     }
   }
@@ -362,23 +378,50 @@ class LocationMonitorService {
   }
 
   /// Store location history in Firestore
+  /// Works offline - queues location data for later sync
   static Future<void> _storeLocationHistory(Position position, double distance) async {
     if (_currentAttendance == null) return;
 
-    try {
-      await _firestore.collection('location_history').add({
-        'attendanceId': _currentAttendance!.id,
-        'userId': _currentUserId,
-        'userName': _currentUserName,
-        'storeId': _currentStore?.id,
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'distance': distance,
-        'isOutsideRadius': distance > _alertDistanceMeters,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      print('📍 Error storing location history: $e');
+    final isOnline = await OfflineSyncManager.checkConnectivity();
+    final isOutsideRadius = distance > _alertDistanceMeters;
+
+    if (isOnline) {
+      try {
+        await _firestore.collection('location_history').add({
+          'attendanceId': _currentAttendance!.id,
+          'userId': _currentUserId,
+          'userName': _currentUserName,
+          'storeId': _currentStore?.id,
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'distance': distance,
+          'isOutsideRadius': isOutsideRadius,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        print('📍 Error storing location history, queuing for offline sync: $e');
+        // Queue for offline sync
+        await OfflineSyncManager.addLocationToQueue(
+          attendanceId: _currentAttendance!.id,
+          userId: _currentUserId ?? '',
+          latitude: position.latitude,
+          longitude: position.longitude,
+          distance: distance,
+          isOutsideRadius: isOutsideRadius,
+          timestamp: DateTime.now(),
+        );
+      }
+    } else {
+      // Offline: Queue for later sync
+      await OfflineSyncManager.addLocationToQueue(
+        attendanceId: _currentAttendance!.id,
+        userId: _currentUserId ?? '',
+        latitude: position.latitude,
+        longitude: position.longitude,
+        distance: distance,
+        isOutsideRadius: isOutsideRadius,
+        timestamp: DateTime.now(),
+      );
     }
   }
 
@@ -613,7 +656,15 @@ class LocationMonitorService {
   }
 
   /// Notify admin about employee being far from store
+  /// Handles offline gracefully - notifications will be sent when online
   static Future<void> _notifyAdminAboutDistance(double distance, Position position) async {
+    final isOnline = await OfflineSyncManager.checkConnectivity();
+
+    if (!isOnline) {
+      print('📍 Offline - admin notification will be delayed');
+      return;
+    }
+
     try {
       // Create notification record for admin
       await _firestore.collection('notifications').add({
