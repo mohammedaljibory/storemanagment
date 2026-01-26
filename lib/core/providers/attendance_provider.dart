@@ -233,6 +233,12 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
+  /// Fetch and refresh the current session for a user
+  Future<void> fetchCurrentSession(String userId) async {
+    await checkTodayAttendance(userId);
+    notifyListeners();
+  }
+
   /// Check if user has checked in today
   Future<void> checkTodayAttendance(String userId) async {
     try {
