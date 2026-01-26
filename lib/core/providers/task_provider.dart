@@ -550,12 +550,32 @@ class TaskProvider extends ChangeNotifier {
   /// Check and create repeating tasks (NEW)
   Future<void> _checkAndCreateRepeatingTasks() async {
     final now = DateTime.now();
+    final tasksToProcess = <TaskModel>[];
+
+    // Collect tasks that need processing
     for (var task in _tasks) {
-      if (task.isRepeating && 
+      if (task.isRepeating &&
           task.status == TaskStatus.completed &&
           task.nextRepeatDate != null &&
           task.nextRepeatDate!.isBefore(now)) {
-        await _createNextRepeatingTask(task);
+        tasksToProcess.add(task);
+      }
+    }
+
+    // Process each task (one at a time to prevent race conditions)
+    for (var task in tasksToProcess) {
+      // Double-check from Firestore to prevent duplicates due to stale local cache
+      try {
+        final freshDoc = await _firestore.collection('tasks').doc(task.id).get();
+        if (freshDoc.exists) {
+          final freshData = freshDoc.data()!;
+          final isStillRepeating = freshData['isRepeating'] as bool? ?? false;
+          if (isStillRepeating) {
+            await _createNextRepeatingTask(task);
+          }
+        }
+      } catch (e) {
+        print('Error checking task for repeat: $e');
       }
     }
   }
@@ -564,6 +584,19 @@ class TaskProvider extends ChangeNotifier {
   Future<void> _createNextRepeatingTask(TaskModel originalTask) async {
     final nextDeadline = _calculateNextDeadline(originalTask);
     if (nextDeadline == null) return;
+
+    // IMPORTANT: Check if a pending task with the same parentTaskId already exists
+    // to prevent duplicate creation
+    final parentId = originalTask.parentTaskId ?? originalTask.id;
+    final existingPendingTask = _tasks.any((t) =>
+        t.parentTaskId == parentId &&
+        t.id != originalTask.id &&
+        (t.status == TaskStatus.pending || t.status == TaskStatus.inProgress));
+
+    if (existingPendingTask) {
+      print('Skipping duplicate recurring task creation - pending task already exists');
+      return;
+    }
 
     final newTask = TaskModel(
       id: '',
@@ -583,7 +616,7 @@ class TaskProvider extends ChangeNotifier {
       status: TaskStatus.pending,
       priority: originalTask.priority,
       repeatType: originalTask.repeatType,
-      parentTaskId: originalTask.parentTaskId ?? originalTask.id,
+      parentTaskId: parentId,
       isRepeating: true,
       nextRepeatDate: _calculateNextRepeatDate(nextDeadline, originalTask.repeatType),
       repeatTime: originalTask.repeatTime,
@@ -591,6 +624,22 @@ class TaskProvider extends ChangeNotifier {
     );
 
     await createTask(newTask);
+
+    // IMPORTANT: Mark the original task as no longer repeating
+    // The chain continues with the newly created task
+    await _firestore.collection('tasks').doc(originalTask.id).update({
+      'isRepeating': false,
+      'nextRepeatDate': null,
+    });
+
+    // Update local list
+    final index = _tasks.indexWhere((t) => t.id == originalTask.id);
+    if (index != -1) {
+      _tasks[index] = _tasks[index].copyWith(
+        isRepeating: false,
+        nextRepeatDate: null,
+      );
+    }
 
     // Send notification that task has recurred (if enabled)
     if (originalTask.repeatNotificationEnabled) {
