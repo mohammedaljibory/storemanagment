@@ -63,6 +63,9 @@ class TimeOffMonitorService {
     // Update status to active
     await _updateTimeOffStatus(TimeOffReturnStatus.active);
 
+    // Notify admin that time-off started
+    await _notifyAdminTimeOffStarted();
+
     // Start periodic check (every minute)
     _monitorTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _checkTimeOffStatus();
@@ -238,6 +241,61 @@ class TimeOffMonitorService {
     }
   }
 
+  /// Notify admin that time-off has started
+  static Future<void> _notifyAdminTimeOffStarted() async {
+    if (_activeTimeOff == null) return;
+
+    try {
+      await _firestore.collection('notifications').add({
+        'type': 'time_off_started',
+        'title': '🕐 بدأت زمنية موظف',
+        'body': '${_activeTimeOff!.employeeName} بدأ زمنيته من ${_activeTimeOff!.startTime} حتى ${_activeTimeOff!.expectedReturnTime}',
+        'employeeId': _activeTimeOff!.employeeId,
+        'employeeName': _activeTimeOff!.employeeName,
+        'storeId': _activeTimeOff!.storeId,
+        'storeName': _activeTimeOff!.storeName,
+        'requestId': _activeTimeOff!.id,
+        'startTime': _activeTimeOff!.startTime,
+        'expectedReturnTime': _activeTimeOff!.expectedReturnTime,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      print('⏰ Admin notified about time-off started');
+    } catch (e) {
+      print('⏰ Error notifying admin about time-off start: $e');
+    }
+  }
+
+  /// Notify admin that employee returned from time-off
+  static Future<void> _notifyAdminEmployeeReturned({required bool onTime}) async {
+    if (_activeTimeOff == null) return;
+
+    try {
+      final statusText = onTime ? 'في الوقت المحدد ✅' : 'متأخر (ضمن فترة السماح) ⚠️';
+
+      await _firestore.collection('notifications').add({
+        'type': 'time_off_returned',
+        'title': '✅ عاد موظف من الزمنية',
+        'body': '${_activeTimeOff!.employeeName} عاد من الزمنية $statusText',
+        'employeeId': _activeTimeOff!.employeeId,
+        'employeeName': _activeTimeOff!.employeeName,
+        'storeId': _activeTimeOff!.storeId,
+        'storeName': _activeTimeOff!.storeName,
+        'requestId': _activeTimeOff!.id,
+        'returnedOnTime': onTime,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      print('⏰ Admin notified about employee return');
+    } catch (e) {
+      print('⏰ Error notifying admin about return: $e');
+    }
+  }
+
   /// Update time-off request status in Firestore
   static Future<void> _updateTimeOffStatus(TimeOffReturnStatus status, {DateTime? actualReturnTime}) async {
     if (_activeTimeOff == null) return;
@@ -276,15 +334,21 @@ class TimeOffMonitorService {
     final expectedReturn = _activeTimeOff!.expectedReturnDateTime;
 
     TimeOffReturnStatus status;
+    bool onTime;
     if (expectedReturn != null && now.isAfter(expectedReturn)) {
       // Returned late (but within grace period)
       status = TimeOffReturnStatus.late;
+      onTime = false;
       print('⏰ Employee returned late');
     } else {
       // Returned on time
       status = TimeOffReturnStatus.returned;
+      onTime = true;
       print('⏰ Employee returned on time');
     }
+
+    // Notify admin about return
+    await _notifyAdminEmployeeReturned(onTime: onTime);
 
     await _updateTimeOffStatus(status, actualReturnTime: now);
     await stopMonitoring();

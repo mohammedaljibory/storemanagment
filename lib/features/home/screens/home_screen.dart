@@ -10,16 +10,19 @@ import '../../../core/providers/shift_provider.dart';
 import '../../../core/models/store_model.dart';
 import '../../../core/models/shift_model.dart';
 import '../../../core/models/user_model.dart';
+import '../../../core/models/request_model.dart';
 import '../../../core/providers/request_provider.dart';
 import '../../../core/routes/app_routes.dart' show AppRoutes;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 import '../../../core/services/location_monitor_service.dart';
+import '../../../core/services/time_off_monitor_service.dart';
 import '../../tasks/screens/tasks_screen.dart';
 import '../../attendance/screens/attendance_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../../requests/screens/requests_screen.dart';
 import '../../attendance/widgets/break_button_widget.dart';
+import '../widgets/time_off_countdown_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -316,6 +319,36 @@ class _DashboardTabState extends State<DashboardTab> {
                 _buildVacationGreetingCard(context, user.id, requestProvider, isDarkMode),
                 const SizedBox(height: 15),
               ],
+
+              // Time-Off Countdown Widget (when employee is on active time-off)
+              if (user != null && !attendanceProvider.isCheckedIn)
+                FutureBuilder(
+                  future: TimeOffMonitorService.getActiveTimeOffToday(user.id),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData && snapshot.data != null) {
+                      final timeOff = snapshot.data!;
+                      // Only show if time-off is active and hasn't returned yet
+                      if (timeOff.timeOffReturnStatus == TimeOffReturnStatus.active ||
+                          timeOff.timeOffReturnStatus == TimeOffReturnStatus.pending) {
+                        return Column(
+                          children: [
+                            TimeOffCountdownWidget(
+                              timeOff: timeOff,
+                              userId: user.id,
+                              userName: user.name,
+                              onAutoCheckIn: () {
+                                // Refresh attendance state
+                                attendanceProvider.fetchCurrentSession(user.id);
+                              },
+                            ),
+                            const SizedBox(height: 15),
+                          ],
+                        );
+                      }
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
 
               // Check In/Out Card
               _buildCheckInCard(
