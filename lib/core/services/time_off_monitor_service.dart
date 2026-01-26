@@ -176,7 +176,7 @@ class TimeOffMonitorService {
     );
   }
 
-  /// Block employee and notify admin
+  /// Block employee, auto checkout, and notify admin
   static Future<void> _blockEmployee() async {
     if (_activeTimeOff == null || _currentUserId == null) return;
 
@@ -185,11 +185,14 @@ class TimeOffMonitorService {
     // Update status to blocked
     await _updateTimeOffStatus(TimeOffReturnStatus.blocked);
 
+    // Auto checkout the employee if they have an active session
+    await _autoCheckoutEmployee();
+
     // Show notification to employee
     await _notifications.show(
       _blockedNotificationId,
-      '⛔ تم حظر تسجيل الدخول',
-      'تأخرت عن العودة من الزمنية. تواصل مع الإدارة.',
+      '⛔ تم تسجيل خروجك تلقائياً',
+      'تأخرت عن العودة من الزمنية أكثر من 15 دقيقة.\nلا يمكنك الدخول مجدداً اليوم.',
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'time_off_blocked',
@@ -214,15 +217,66 @@ class TimeOffMonitorService {
     await stopMonitoring();
   }
 
-  /// Notify admin that employee didn't return
+  /// Auto checkout employee when grace period is exceeded
+  static Future<void> _autoCheckoutEmployee() async {
+    if (_currentUserId == null) return;
+
+    try {
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+
+      // Find active attendance session for today
+      final attendanceSnapshot = await _firestore
+          .collection('attendance')
+          .where('userId', isEqualTo: _currentUserId)
+          .where('isCheckedOut', isEqualTo: false)
+          .get();
+
+      for (var doc in attendanceSnapshot.docs) {
+        final data = doc.data();
+        DateTime? checkIn;
+        if (data['checkIn'] is Timestamp) {
+          checkIn = (data['checkIn'] as Timestamp).toDate();
+        } else if (data['checkIn'] is String) {
+          checkIn = DateTime.tryParse(data['checkIn']);
+        }
+
+        if (checkIn != null && checkIn.isAfter(todayStart)) {
+          // This is today's session - auto checkout
+          final totalHours = now.difference(checkIn).inMinutes / 60.0;
+          final breakMinutes = (data['totalBreakMinutes'] as int?) ?? 0;
+          final adjustedHours = totalHours - (breakMinutes / 60.0);
+
+          // Calculate time-off minutes
+          int timeOffMinutes = _activeTimeOff?.durationMinutes ?? 0;
+
+          await doc.reference.update({
+            'checkOut': now.toIso8601String(),
+            'totalHours': adjustedHours > 0 ? adjustedHours : 0,
+            'totalTimeOffMinutes': timeOffMinutes,
+            'isCheckedOut': true,
+            'isEarlyLeave': true,
+            'notes': 'تسجيل خروج تلقائي - تجاوز فترة السماح للزمنية',
+          });
+
+          print('⏰ Auto checkout completed for attendance: ${doc.id}');
+          break;
+        }
+      }
+    } catch (e) {
+      print('⏰ Error during auto checkout: $e');
+    }
+  }
+
+  /// Notify admin that employee didn't return and was auto checked out
   static Future<void> _notifyAdminEmployeeBlocked() async {
     if (_activeTimeOff == null) return;
 
     try {
       await _firestore.collection('notifications').add({
         'type': 'time_off_blocked',
-        'title': '⚠️ موظف لم يعد من الزمنية',
-        'body': '${_activeTimeOff!.employeeName} تجاوز فترة السماح ولم يعد من الزمنية',
+        'title': '⛔ تسجيل خروج تلقائي - تجاوز زمنية',
+        'body': '${_activeTimeOff!.employeeName} تجاوز فترة السماح (15 دقيقة) ولم يعد من الزمنية.\nتم تسجيل خروجه تلقائياً وحظر دخوله لبقية اليوم.',
         'employeeId': _activeTimeOff!.employeeId,
         'employeeName': _activeTimeOff!.employeeName,
         'storeId': _activeTimeOff!.storeId,

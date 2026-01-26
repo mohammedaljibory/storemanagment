@@ -55,6 +55,9 @@ class AttendanceModel {
   final int totalBreakMinutes;
   final int breakOvertimeMinutes; // Minutes exceeded break limit
 
+  // Time-off (زمنية) tracking
+  final int totalTimeOffMinutes; // Total time-off duration deducted from working hours
+
   // Status field for Firestore queries (null fields are not indexed)
   final bool isCheckedOut;
 
@@ -92,6 +95,7 @@ class AttendanceModel {
     this.isOnBreak = false,
     this.totalBreakMinutes = 0,
     this.breakOvertimeMinutes = 0,
+    this.totalTimeOffMinutes = 0,
     this.isCheckedOut = false,
     this.employeeType,
     this.isSubstitute = false,
@@ -138,6 +142,7 @@ class AttendanceModel {
       isOnBreak: json['isOnBreak'] as bool? ?? false,
       totalBreakMinutes: json['totalBreakMinutes'] as int? ?? 0,
       breakOvertimeMinutes: json['breakOvertimeMinutes'] as int? ?? 0,
+      totalTimeOffMinutes: json['totalTimeOffMinutes'] as int? ?? 0,
       isCheckedOut: json['isCheckedOut'] as bool? ?? (json['checkOut'] != null),
       employeeType: json['employeeType'] as String?,
       isSubstitute: json['isSubstitute'] as bool? ?? false,
@@ -173,6 +178,7 @@ class AttendanceModel {
       'isOnBreak': isOnBreak,
       'totalBreakMinutes': totalBreakMinutes,
       'breakOvertimeMinutes': breakOvertimeMinutes,
+      'totalTimeOffMinutes': totalTimeOffMinutes,
       'isCheckedOut': isCheckedOut,
       'employeeType': employeeType,
       'isSubstitute': isSubstitute,
@@ -209,6 +215,7 @@ class AttendanceModel {
       'isOnBreak': isOnBreak,
       'totalBreakMinutes': totalBreakMinutes,
       'breakOvertimeMinutes': breakOvertimeMinutes,
+      'totalTimeOffMinutes': totalTimeOffMinutes,
       'isCheckedOut': isCheckedOut,
       'employeeType': employeeType,
       'isSubstitute': isSubstitute,
@@ -243,6 +250,7 @@ class AttendanceModel {
     bool? isOnBreak,
     int? totalBreakMinutes,
     int? breakOvertimeMinutes,
+    int? totalTimeOffMinutes,
     bool? isCheckedOut,
     String? employeeType,
     bool? isSubstitute,
@@ -275,6 +283,7 @@ class AttendanceModel {
       isOnBreak: isOnBreak ?? this.isOnBreak,
       totalBreakMinutes: totalBreakMinutes ?? this.totalBreakMinutes,
       breakOvertimeMinutes: breakOvertimeMinutes ?? this.breakOvertimeMinutes,
+      totalTimeOffMinutes: totalTimeOffMinutes ?? this.totalTimeOffMinutes,
       isCheckedOut: isCheckedOut ?? this.isCheckedOut,
       employeeType: employeeType ?? this.employeeType,
       isSubstitute: isSubstitute ?? this.isSubstitute,
@@ -303,12 +312,30 @@ class AttendanceModel {
     return '${hours}س ${minutes}د';
   }
 
-  // NEW: Get effective hours after penalty
+  // Get effective hours after deducting penalty and time-off
   double get effectiveHours {
     if (totalHours == null) return 0;
     final penaltyHours = penaltyMinutes / 60.0;
-    final effective = totalHours! - penaltyHours;
+    final timeOffHours = totalTimeOffMinutes / 60.0;
+    final effective = totalHours! - penaltyHours - timeOffHours;
     return effective > 0 ? effective : 0;
+  }
+
+  // Check if has time-off deduction
+  bool get hasTimeOffDeduction => totalTimeOffMinutes > 0;
+
+  // Get time-off deduction text
+  String get timeOffDeductionText {
+    if (totalTimeOffMinutes <= 0) return 'لا يوجد';
+    final hours = totalTimeOffMinutes ~/ 60;
+    final mins = totalTimeOffMinutes % 60;
+    if (hours > 0 && mins > 0) {
+      return '$hours ساعة و $mins دقيقة';
+    } else if (hours > 0) {
+      return '$hours ساعة';
+    } else {
+      return '$mins دقيقة';
+    }
   }
 
   String get formattedEffectiveHours {

@@ -561,6 +561,39 @@ class AttendanceProvider extends ChangeNotifier {
         if (totalHours < 0) totalHours = 0;
       }
 
+      // Calculate time-off minutes to deduct (زمنيات)
+      int totalTimeOffMinutes = 0;
+      try {
+        final timeOffRequests = await _firestore
+            .collection('requests')
+            .where('employeeId', isEqualTo: currentAttendance.userId)
+            .where('type', isEqualTo: 'timeOff')
+            .where('status', isEqualTo: 'approved')
+            .get();
+
+        final today = DateTime(now.year, now.month, now.day);
+        for (var doc in timeOffRequests.docs) {
+          final data = doc.data();
+          DateTime? targetDate;
+          if (data['targetDate'] is String) {
+            targetDate = DateTime.tryParse(data['targetDate']);
+          }
+          if (targetDate != null) {
+            final requestDate = DateTime(targetDate.year, targetDate.month, targetDate.day);
+            if (requestDate.isAtSameMomentAs(today)) {
+              // Only count completed time-offs (returned or late)
+              final status = data['timeOffReturnStatus'] as String?;
+              if (status == 'returned' || status == 'late') {
+                totalTimeOffMinutes += (data['durationMinutes'] as int?) ?? 0;
+              }
+            }
+          }
+        }
+        print('📊 Total time-off minutes to deduct: $totalTimeOffMinutes');
+      } catch (e) {
+        print('⚠️ Error calculating time-off minutes: $e');
+      }
+
       // Calculate early leave based on expected end time (handles overnight)
       bool isEarlyLeave = false;
       int earlyLeaveMinutes = 0;
@@ -601,6 +634,7 @@ class AttendanceProvider extends ChangeNotifier {
           'address': currentAttendance.storeName,
         },
         'totalHours': totalHours,
+        'totalTimeOffMinutes': totalTimeOffMinutes, // Time-off deduction
         'isEarlyLeave': isEarlyLeave,
         'earlyLeaveMinutes': earlyLeaveMinutes,
         'isCheckedOut': true, // Mark as checked out for Firestore indexing
@@ -635,6 +669,7 @@ class AttendanceProvider extends ChangeNotifier {
           address: currentAttendance.storeName,
         ),
         totalHours: totalHours,
+        totalTimeOffMinutes: totalTimeOffMinutes,
         isEarlyLeave: isEarlyLeave,
         earlyLeaveMinutes: earlyLeaveMinutes,
         isCheckedOut: true,

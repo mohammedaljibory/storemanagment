@@ -34,12 +34,15 @@ class TimeOffCountdownWidget extends StatefulWidget {
 class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
   Timer? _countdownTimer;
   Duration _remainingTime = Duration.zero;
+  Duration _graceRemaining = Duration.zero;
   bool _isInRange = false;
   bool _isCheckingLocation = false;
   bool _timeOffEnded = false;
+  bool _gracePeriodExceeded = false;
   double _currentDistance = 0;
   StoreModel? _store;
   bool _locationCheckStarted = false; // Track if we started location monitoring
+  bool _autoCheckInAttempted = false; // Prevent multiple auto check-in attempts
 
   @override
   void initState() {
@@ -60,12 +63,24 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
     if (expectedReturn == null) return;
 
     final now = DateTime.now();
+    final graceMinutes = widget.timeOff.graceMinutes;
+    final deadline = expectedReturn.add(Duration(minutes: graceMinutes));
+
     if (now.isBefore(expectedReturn)) {
       _remainingTime = expectedReturn.difference(now);
+      _graceRemaining = Duration(minutes: graceMinutes);
       _timeOffEnded = false;
+      _gracePeriodExceeded = false;
+    } else if (now.isBefore(deadline)) {
+      _remainingTime = Duration.zero;
+      _graceRemaining = deadline.difference(now);
+      _timeOffEnded = true;
+      _gracePeriodExceeded = false;
     } else {
       _remainingTime = Duration.zero;
+      _graceRemaining = Duration.zero;
       _timeOffEnded = true;
+      _gracePeriodExceeded = true;
     }
   }
 
@@ -80,19 +95,20 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
         _calculateRemainingTime();
       });
 
-      // Only start checking location AFTER time-off ends
-      if (_timeOffEnded && !_locationCheckStarted) {
+      // Only start checking location AFTER time-off ends (but not if grace exceeded)
+      if (_timeOffEnded && !_locationCheckStarted && !_gracePeriodExceeded) {
         _locationCheckStarted = true;
         _checkCurrentLocation();
       }
 
       // Continue checking location every 15 seconds after time-off ends
-      if (_timeOffEnded && _locationCheckStarted && timer.tick % 15 == 0) {
+      if (_timeOffEnded && _locationCheckStarted && !_gracePeriodExceeded && timer.tick % 15 == 0) {
         _checkCurrentLocation();
       }
 
-      // If time-off ended and in range, try auto check-in
-      if (_timeOffEnded && _isInRange) {
+      // If time-off ended and in range, try auto check-in (only once, and not if grace exceeded)
+      if (_timeOffEnded && _isInRange && !_autoCheckInAttempted && !_gracePeriodExceeded) {
+        _autoCheckInAttempted = true;
         _attemptAutoCheckIn();
       }
     });
@@ -238,10 +254,14 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _timeOffEnded ? 'انتهت الزمنية!' : 'زمنية نشطة',
+                        _gracePeriodExceeded
+                            ? '⛔ تم حظر الدخول'
+                            : (_timeOffEnded ? 'انتهت الزمنية!' : 'زمنية نشطة'),
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: _timeOffEnded ? Colors.orange : AppTheme.primaryColor,
+                          color: _gracePeriodExceeded
+                              ? Colors.red
+                              : (_timeOffEnded ? Colors.orange : AppTheme.primaryColor),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -266,32 +286,48 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
                 color: (isDarkMode ? Colors.black : Colors.white).withOpacity(0.3),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _timeOffEnded ? Colors.orange.withOpacity(0.5) : AppTheme.primaryColor.withOpacity(0.3),
+                  color: _gracePeriodExceeded
+                      ? Colors.red.withOpacity(0.5)
+                      : (_timeOffEnded ? Colors.orange.withOpacity(0.5) : AppTheme.primaryColor.withOpacity(0.3)),
                   width: 2,
                 ),
               ),
               child: Column(
                 children: [
                   Text(
-                    _timeOffEnded ? 'يجب العودة الآن!' : 'الوقت المتبقي',
+                    _gracePeriodExceeded
+                        ? 'تم تجاوز فترة السماح'
+                        : (_timeOffEnded ? 'فترة السماح المتبقية' : 'الوقت المتبقي'),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: isDarkMode ? Colors.white70 : Colors.black54,
+                      color: _gracePeriodExceeded ? Colors.red : (isDarkMode ? Colors.white70 : Colors.black54),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _timeOffEnded ? '00:00' : _formatDuration(_remainingTime),
+                    _gracePeriodExceeded
+                        ? '00:00'
+                        : (_timeOffEnded ? _formatDuration(_graceRemaining) : _formatDuration(_remainingTime)),
                     style: Theme.of(context).textTheme.displayMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       fontFamily: 'monospace',
-                      color: _timeOffEnded ? Colors.red : null,
+                      color: _gracePeriodExceeded ? Colors.red : (_timeOffEnded ? Colors.orange : null),
                       letterSpacing: 4,
                     ),
                   ),
-                  if (_timeOffEnded) ...[
+                  if (_gracePeriodExceeded) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'فترة السماح: ${widget.timeOff.graceMinutes} دقيقة',
+                      'لا يمكنك الدخول مجدداً اليوم',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ] else if (_timeOffEnded) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'سارع بالعودة للمتجر!',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.orange.shade700,
