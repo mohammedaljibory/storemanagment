@@ -989,3 +989,331 @@ exports.sendNotification = functions.https.onCall(async (data, context) => {
     failureCount: response?.failureCount || 0,
   };
 });
+
+// ============================================
+// TIME-OFF GRACE PERIOD MONITORING
+// ============================================
+
+/**
+ * Check for employees who exceeded time-off grace period
+ * Runs every 1 minute for precise timing
+ * - Blocks employee who doesn't return within grace period
+ * - Auto-checkouts and notifies admin
+ */
+exports.checkTimeOffGracePeriod = functions.pubsub
+    .schedule("every 1 minutes")
+    .timeZone("Asia/Baghdad")
+    .onRun(async (context) => {
+      console.log("Running time-off grace period check...");
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      try {
+        // Get active time-off requests for today
+        const timeOffSnapshot = await db.collection("requests")
+            .where("type", "==", "timeOff")
+            .where("status", "==", "approved")
+            .where("timeOffReturnStatus", "==", "active")
+            .get();
+
+        if (timeOffSnapshot.empty) {
+          console.log("No active time-off requests found");
+          return null;
+        }
+
+        console.log(`Found ${timeOffSnapshot.size} active time-off requests`);
+
+        for (const doc of timeOffSnapshot.docs) {
+          const data = doc.data();
+          const requestId = doc.id;
+
+          // Parse target date
+          let targetDate;
+          if (data.targetDate && data.targetDate.toDate) {
+            targetDate = data.targetDate.toDate();
+          } else if (data.targetDate) {
+            targetDate = new Date(data.targetDate);
+          }
+
+          // Check if this is today's request
+          if (!targetDate || targetDate < todayStart || targetDate >= todayEnd) {
+            continue;
+          }
+
+          // Parse expected return time
+          if (!data.expectedReturnTime) continue;
+          const [returnHour, returnMinute] = data.expectedReturnTime.split(":").map(Number);
+
+          const expectedReturn = new Date(
+              targetDate.getFullYear(),
+              targetDate.getMonth(),
+              targetDate.getDate(),
+              returnHour,
+              returnMinute,
+          );
+
+          // Calculate deadline with grace period (default 15 minutes)
+          const graceMinutes = data.graceMinutes || 15;
+          const deadline = new Date(expectedReturn.getTime() + graceMinutes * 60000);
+
+          // Check if deadline has passed
+          if (now > deadline) {
+            console.log(`Time-off grace period exceeded for ${data.employeeName}`);
+            await blockEmployeeForTimeOff(doc, data, expectedReturn, now);
+          }
+        }
+
+        return null;
+      } catch (error) {
+        console.error("Error in time-off grace check:", error);
+        return null;
+      }
+    });
+
+/**
+ * Block employee who exceeded time-off grace period
+ */
+async function blockEmployeeForTimeOff(doc, data, expectedReturn, now) {
+  try {
+    // Update time-off status to blocked
+    await doc.ref.update({
+      timeOffReturnStatus: "blocked",
+      blockedAt: now.toISOString(),
+      blockedBy: "cloud_function",
+    });
+
+    console.log(`Blocked: ${data.employeeName} - exceeded time-off grace period`);
+
+    // Find and auto checkout active attendance
+    const attendanceSnapshot = await db.collection("attendance")
+        .where("userId", "==", data.employeeId)
+        .where("checkOut", "==", null)
+        .get();
+
+    for (const attendanceDoc of attendanceSnapshot.docs) {
+      const attendanceData = attendanceDoc.data();
+
+      // Parse check-in time
+      let checkIn;
+      if (attendanceData.checkIn && attendanceData.checkIn.toDate) {
+        checkIn = attendanceData.checkIn.toDate();
+      } else if (attendanceData.checkIn) {
+        checkIn = new Date(attendanceData.checkIn);
+      }
+
+      if (checkIn) {
+        const totalHours = (now - checkIn) / (1000 * 60 * 60);
+        const breakMinutes = attendanceData.totalBreakMinutes || 0;
+        const adjustedHours = Math.max(0, totalHours - breakMinutes / 60);
+
+        await attendanceDoc.ref.update({
+          checkOut: now.toISOString(),
+          totalHours: Math.round(adjustedHours * 100) / 100,
+          totalTimeOffMinutes: data.durationMinutes || 0,
+          isCheckedOut: true,
+          isEarlyLeave: true,
+          autoCheckout: true,
+          autoCheckoutReason: "تسجيل خروج تلقائي - تجاوز فترة السماح للزمنية",
+          autoCheckoutSource: "cloud_function",
+        });
+
+        console.log(`Auto checkout for blocked employee: ${data.employeeName}`);
+      }
+    }
+
+    // Send notification to employee
+    const employeeTokens = await getTokensForUsers([data.employeeId]);
+    if (employeeTokens.length > 0) {
+      const employeeMessage = {
+        notification: {
+          title: "⛔ تم تسجيل خروجك تلقائياً",
+          body: "تأخرت عن العودة من الزمنية أكثر من 15 دقيقة.\nلا يمكنك الدخول مجدداً اليوم.",
+        },
+        data: {
+          type: "time_off_blocked",
+          action: "blocked",
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+        },
+        android: {
+          notification: {
+            channelId: "attendance_channel",
+            priority: "max",
+            defaultSound: true,
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: "default",
+              badge: 1,
+            },
+          },
+        },
+        tokens: employeeTokens,
+      };
+      await sendMulticastNotification(employeeMessage, "notifyEmployeeTimeOffBlocked");
+    }
+
+    // Notify admin
+    const adminTokens = await getAdminTokens();
+    if (adminTokens.length > 0) {
+      const adminMessage = {
+        notification: {
+          title: "⛔ تسجيل خروج تلقائي - تجاوز زمنية",
+          body: `${data.employeeName} تجاوز فترة السماح ولم يعد من الزمنية.\nتم تسجيل خروجه تلقائياً.`,
+        },
+        data: {
+          type: "time_off_blocked_admin",
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          click_action: "FLUTTER_NOTIFICATION_CLICK",
+        },
+        android: {
+          notification: {
+            channelId: "attendance_channel",
+            priority: "high",
+            defaultSound: true,
+          },
+        },
+        tokens: adminTokens,
+      };
+      await sendMulticastNotification(adminMessage, "notifyAdminTimeOffBlocked");
+    }
+
+    // Create notification document for history
+    await db.collection("notifications").add({
+      title: "⛔ تسجيل خروج تلقائي - تجاوز زمنية",
+      body: `${data.employeeName} تجاوز فترة السماح ولم يعد من الزمنية. تم تسجيل خروجه تلقائياً.`,
+      type: "time_off_blocked",
+      forAdmin: true,
+      employeeId: data.employeeId,
+      employeeName: data.employeeName,
+      storeId: data.storeId,
+      storeName: data.storeName,
+      requestId: doc.id,
+      createdAt: now.toISOString(),
+      read: false,
+      skipPush: true,
+      source: "cloud_function",
+    });
+  } catch (error) {
+    console.error(`Error blocking employee ${data.employeeName}:`, error);
+  }
+}
+
+// ============================================
+// BREAK OVERTIME MONITORING
+// ============================================
+
+/**
+ * Check for employees with extended breaks
+ * Runs every 5 minutes
+ * - Notifies admin when break exceeds 60 minutes
+ */
+exports.checkBreakOvertime = functions.pubsub
+    .schedule("every 5 minutes")
+    .timeZone("Asia/Baghdad")
+    .onRun(async (context) => {
+      console.log("Running break overtime check...");
+
+      const now = new Date();
+      const BREAK_MAX_MINUTES = 60;
+
+      try {
+        // Get active breaks
+        const activeBreaksSnapshot = await db.collection("attendance")
+            .where("isOnBreak", "==", true)
+            .get();
+
+        if (activeBreaksSnapshot.empty) {
+          console.log("No active breaks found");
+          return null;
+        }
+
+        console.log(`Found ${activeBreaksSnapshot.size} active breaks`);
+
+        for (const doc of activeBreaksSnapshot.docs) {
+          const data = doc.data();
+
+          if (!data.breakStartTime) continue;
+
+          // Parse break start time
+          let breakStart;
+          if (data.breakStartTime.toDate) {
+            breakStart = data.breakStartTime.toDate();
+          } else {
+            breakStart = new Date(data.breakStartTime);
+          }
+
+          const breakMinutes = Math.floor((now - breakStart) / 60000);
+
+          // Check if break exceeded maximum
+          if (breakMinutes > BREAK_MAX_MINUTES) {
+            const overtimeMinutes = breakMinutes - BREAK_MAX_MINUTES;
+
+            // Check if we already notified recently (prevent spam)
+            const recentNotificationsSnapshot = await db.collection("notifications")
+                .where("type", "==", "break_overtime_server")
+                .where("userId", "==", data.userId)
+                .where("createdAt", ">", new Date(now.getTime() - 10 * 60000).toISOString())
+                .get();
+
+            if (!recentNotificationsSnapshot.empty) {
+              console.log(`Already notified about break overtime for ${data.userName}`);
+              continue;
+            }
+
+            console.log(`Break overtime for ${data.userName}: ${overtimeMinutes} minutes`);
+
+            // Notify admin
+            const adminTokens = await getAdminTokens();
+            if (adminTokens.length > 0) {
+              const message = {
+                notification: {
+                  title: "تجاوز وقت الاستراحة",
+                  body: `${data.userName} تجاوز وقت الاستراحة بـ ${overtimeMinutes} دقيقة`,
+                },
+                data: {
+                  type: "break_overtime_server",
+                  userId: data.userId,
+                  userName: data.userName,
+                  click_action: "FLUTTER_NOTIFICATION_CLICK",
+                },
+                android: {
+                  notification: {
+                    channelId: "break_channel",
+                    priority: "high",
+                    defaultSound: true,
+                  },
+                },
+                tokens: adminTokens,
+              };
+              await sendMulticastNotification(message, "notifyAdminBreakOvertime");
+            }
+
+            // Create notification document
+            await db.collection("notifications").add({
+              title: "تجاوز وقت الاستراحة",
+              body: `${data.userName} تجاوز وقت الاستراحة بـ ${overtimeMinutes} دقيقة`,
+              type: "break_overtime_server",
+              forAdmin: true,
+              userId: data.userId,
+              userName: data.userName,
+              attendanceId: doc.id,
+              overtimeMinutes: overtimeMinutes,
+              createdAt: now.toISOString(),
+              read: false,
+              skipPush: true,
+              source: "cloud_function",
+            });
+          }
+        }
+
+        return null;
+      } catch (error) {
+        console.error("Error in break overtime check:", error);
+        return null;
+      }
+    });
