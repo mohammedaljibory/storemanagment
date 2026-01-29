@@ -23,7 +23,7 @@ class OfflineSyncManager {
 
   // Connectivity state
   static bool _isOnline = true;
-  static StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  static StreamSubscription<dynamic>? _connectivitySubscription;
 
   // Queue keys for SharedPreferences
   static const String _breakQueueKey = 'offline_break_queue';
@@ -43,14 +43,24 @@ class OfflineSyncManager {
   static Future<void> initialize() async {
     // Check initial connectivity
     final connectivityResult = await Connectivity().checkConnectivity();
-    _isOnline = !connectivityResult.contains(ConnectivityResult.none);
+    // Handle both old API (single result) and new API (list)
+    if (connectivityResult is List) {
+      _isOnline = !(connectivityResult as List).contains(ConnectivityResult.none);
+    } else {
+      _isOnline = connectivityResult != ConnectivityResult.none;
+    }
     print('📶 Initial connectivity: ${_isOnline ? "Online" : "Offline"}');
 
     // Listen for connectivity changes
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen(
-      (List<ConnectivityResult> results) async {
+      (dynamic result) async {
         final wasOffline = !_isOnline;
-        _isOnline = !results.contains(ConnectivityResult.none);
+        // Handle both old API (single result) and new API (list)
+        if (result is List) {
+          _isOnline = !(result as List).contains(ConnectivityResult.none);
+        } else {
+          _isOnline = result != ConnectivityResult.none;
+        }
 
         print('📶 Connectivity changed: ${_isOnline ? "Online" : "Offline"}');
 
@@ -77,7 +87,12 @@ class OfflineSyncManager {
   /// Check connectivity (one-time check)
   static Future<bool> checkConnectivity() async {
     final connectivityResult = await Connectivity().checkConnectivity();
-    _isOnline = !connectivityResult.contains(ConnectivityResult.none);
+    // Handle both old API (single result) and new API (list)
+    if (connectivityResult is List) {
+      _isOnline = !(connectivityResult as List).contains(ConnectivityResult.none);
+    } else {
+      _isOnline = connectivityResult != ConnectivityResult.none;
+    }
     return _isOnline;
   }
 

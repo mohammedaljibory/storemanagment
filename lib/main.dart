@@ -70,11 +70,14 @@ class _MyAppState extends State<MyApp> {
 
   /// Setup connectivity listener to sync offline data
   void _setupConnectivityListener() {
-    Connectivity().onConnectivityChanged.listen((result) {
+    Connectivity().onConnectivityChanged.listen((dynamic result) {
       // Handle both single result (old API) and list (new API)
-      final isConnected = result is List
-          ? !result.contains(ConnectivityResult.none)
-          : result != ConnectivityResult.none;
+      bool isConnected;
+      if (result is List) {
+        isConnected = !(result as List).contains(ConnectivityResult.none);
+      } else {
+        isConnected = result != ConnectivityResult.none;
+      }
 
       if (isConnected) {
         // Connection restored - sync all offline data

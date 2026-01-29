@@ -115,6 +115,10 @@ class AttendanceProvider extends ChangeNotifier {
   /// Check connectivity
   Future<bool> _hasConnectivity() async {
     final connectivityResult = await Connectivity().checkConnectivity();
+    // Handle both old API (single result) and new API (list)
+    if (connectivityResult is List) {
+      return !(connectivityResult as List).contains(ConnectivityResult.none);
+    }
     return connectivityResult != ConnectivityResult.none;
   }
 
