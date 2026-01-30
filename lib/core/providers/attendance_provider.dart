@@ -531,7 +531,8 @@ class AttendanceProvider extends ChangeNotifier {
 
   /// Check out - handles overnight shifts correctly
   /// Validates that employee is within store radius before checkout
-  Future<bool> checkOut({ShiftModel? shift, StoreModel? store}) async {
+  /// Blocks checkout during active time-off (unless forceCheckout is true)
+  Future<bool> checkOut({ShiftModel? shift, StoreModel? store, bool forceCheckout = false}) async {
     try {
       if (_todayAttendance == null && _currentSession == null) {
         _errorMessage = 'لم تقم بتسجيل الدخول اليوم';
@@ -540,6 +541,28 @@ class AttendanceProvider extends ChangeNotifier {
       }
 
       final currentAttendance = _currentSession ?? _todayAttendance!;
+
+      // Check if employee has active time-off (block manual checkout)
+      if (!forceCheckout) {
+        final timeOffStatus = await TimeOffMonitorService.checkTimeOffBlockStatus(currentAttendance.userId);
+        if (timeOffStatus != null) {
+          final request = timeOffStatus['request'] as RequestModel?;
+          if (request != null &&
+              (request.timeOffReturnStatus == TimeOffReturnStatus.active ||
+               request.timeOffReturnStatus == TimeOffReturnStatus.pending)) {
+            // Check if time-off has started
+            final startTime = _parseTimeToday(request.startTime);
+            final now = DateTime.now();
+            if (startTime != null && now.isAfter(startTime)) {
+              _errorMessage = 'لا يمكن تسجيل الخروج أثناء الزمنية النشطة\n'
+                  'الزمنية: ${request.startTime} - ${request.endTime}\n'
+                  'يرجى الانتظار حتى انتهاء الزمنية أو التواصل مع المدير';
+              notifyListeners();
+              return false;
+            }
+          }
+        }
+      }
 
       _isLoading = true;
       _errorMessage = null;
@@ -1249,6 +1272,18 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   // ============ HELPERS ============
+
+  /// Parse time string (HH:mm) to DateTime today
+  DateTime? _parseTimeToday(String? time) {
+    if (time == null) return null;
+    final parts = time.split(':');
+    if (parts.length != 2) return null;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return null;
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, hour, minute);
+  }
 
   /// Convert Firestore Timestamps to ISO strings
   void _convertTimestamps(Map<String, dynamic> data) {

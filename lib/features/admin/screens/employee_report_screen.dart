@@ -657,6 +657,7 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
             PdfColor statusColor;
             switch (t.timeOffReturnStatus) {
               case TimeOffReturnStatus.returned:
+              case TimeOffReturnStatus.completedNoReturn:
                 statusColor = PdfColors.green;
                 break;
               case TimeOffReturnStatus.late:
@@ -736,7 +737,9 @@ class _EmployeeReportScreenState extends State<EmployeeReportScreen> {
 
     // Time-off statistics
     final totalTimeOffs = timeOffs.length;
-    final returnedOnTime = timeOffs.where((t) => t.timeOffReturnStatus == TimeOffReturnStatus.returned).length;
+    final returnedOnTime = timeOffs.where((t) =>
+        t.timeOffReturnStatus == TimeOffReturnStatus.returned ||
+        t.timeOffReturnStatus == TimeOffReturnStatus.completedNoReturn).length;
     final returnedLate = timeOffs.where((t) => t.timeOffReturnStatus == TimeOffReturnStatus.late).length;
     final blockedTimeOffs = timeOffs.where((t) => t.timeOffReturnStatus == TimeOffReturnStatus.blocked).length;
     final totalTimeOffMinutes = timeOffs.fold<int>(0, (sum, t) => sum + (t.durationMinutes ?? 0));

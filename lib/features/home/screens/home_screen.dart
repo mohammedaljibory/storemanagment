@@ -684,7 +684,10 @@ class _DashboardTabState extends State<DashboardTab> {
               if (user == null) return;
 
               if (isCheckedIn) {
-                // Check Out
+                // Check Out - Show confirmation dialog first
+                final confirmed = await _showCheckoutConfirmation(context);
+                if (!confirmed || !context.mounted) return;
+
                 final currentSession = attendanceProvider.currentSession;
 
                 // Check if this is a free employee
@@ -1150,6 +1153,52 @@ class _DashboardTabState extends State<DashboardTab> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  /// Show checkout confirmation dialog
+  Future<bool> _showCheckoutConfirmation(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.warningColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.logout, color: AppTheme.warningColor),
+            ),
+            const SizedBox(width: 10),
+            const Text('تأكيد تسجيل الخروج'),
+          ],
+        ),
+        content: const Text(
+          'هل أنت متأكد من رغبتك في تسجيل الخروج؟\n\n'
+          'لن تتمكن من تسجيل الدخول مرة أخرى إلا في الشفت التالي.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('تسجيل الخروج'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   void _showLateWarning(BuildContext context, int lateMinutes) {

@@ -367,6 +367,8 @@ class RequestModel {
         return 'عاد متأخر';
       case TimeOffReturnStatus.blocked:
         return 'محظور';
+      case TimeOffReturnStatus.completedNoReturn:
+        return 'نهاية دوام';
     }
   }
 
