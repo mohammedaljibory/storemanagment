@@ -262,12 +262,137 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
       );
     }
 
+    // For completed tasks, group by completion date
+    if (status == TaskStatus.completed) {
+      return _buildGroupedTaskList(tasks);
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       itemCount: tasks.length,
       itemBuilder: (context, index) {
         return _buildTaskCard(tasks[index], index);
       },
+    );
+  }
+
+  Widget _buildGroupedTaskList(List<TaskModel> tasks) {
+    // Sort tasks by completion date (newest first)
+    final sortedTasks = List<TaskModel>.from(tasks)
+      ..sort((a, b) {
+        final aDate = a.completedAt ?? a.deadline;
+        final bDate = b.completedAt ?? b.deadline;
+        return bDate.compareTo(aDate);
+      });
+
+    // Group tasks by date
+    final Map<String, List<TaskModel>> groupedTasks = {};
+    for (final task in sortedTasks) {
+      final date = task.completedAt ?? task.deadline;
+      final dateKey = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+      groupedTasks.putIfAbsent(dateKey, () => []);
+      groupedTasks[dateKey]!.add(task);
+    }
+
+    final dateKeys = groupedTasks.keys.toList();
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: dateKeys.length,
+      itemBuilder: (context, index) {
+        final dateKey = dateKeys[index];
+        final tasksForDate = groupedTasks[dateKey]!;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDateHeader(dateKey, tasksForDate.length),
+            ...tasksForDate.asMap().entries.map((entry) =>
+              _buildTaskCard(entry.value, entry.key)
+            ),
+            const SizedBox(height: 10),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDateHeader(String dateKey, int taskCount) {
+    final parts = dateKey.split('-');
+    final date = DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    String dateText;
+    if (date == today) {
+      dateText = 'اليوم';
+    } else if (date == yesterday) {
+      dateText = 'أمس';
+    } else {
+      final dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      final dayName = dayNames[date.weekday % 7];
+      dateText = '$dayName، ${date.day}/${date.month}/${date.year}';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12, top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.successColor.withOpacity(0.15),
+            AppTheme.successColor.withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppTheme.successColor.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.successColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.calendar_today,
+              size: 16,
+              color: AppTheme.successColor,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              dateText,
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                color: AppTheme.successColor,
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.successColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$taskCount ${taskCount == 1 ? 'مهمة' : 'مهام'}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.successColor,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
