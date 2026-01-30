@@ -385,6 +385,20 @@ class OfflineSyncManager {
     }
   }
 
+  /// Check if error is recoverable (should retry) or not (should skip)
+  static bool _isRecoverableError(dynamic error) {
+    final errorStr = error.toString().toLowerCase();
+    // Non-recoverable errors - document doesn't exist, permission denied, etc.
+    if (errorStr.contains('not-found') ||
+        errorStr.contains('not found') ||
+        errorStr.contains('permission-denied') ||
+        errorStr.contains('invalid-argument')) {
+      return false;
+    }
+    // Network errors, timeouts, etc. are recoverable
+    return true;
+  }
+
   /// Sync pending break operations
   static Future<int> _syncBreakQueue() async {
     final queue = await getBreakQueue();
@@ -426,7 +440,14 @@ class OfflineSyncManager {
         synced++;
       } catch (e) {
         print('❌ Failed to sync break operation: $e');
-        failedItems.add(item);
+        // Only retry if error is recoverable (network issues, etc.)
+        // Skip items with non-recoverable errors (document not found, permission denied)
+        if (_isRecoverableError(e)) {
+          failedItems.add(item);
+        } else {
+          print('🗑️ Removing stale break item from queue (non-recoverable error)');
+          synced++; // Count as "handled"
+        }
       }
     }
 
@@ -490,7 +511,13 @@ class OfflineSyncManager {
         synced++;
       } catch (e) {
         print('❌ Failed to sync time-off operation: $e');
-        failedItems.add(item);
+        // Only retry if error is recoverable (network issues, etc.)
+        if (_isRecoverableError(e)) {
+          failedItems.add(item);
+        } else {
+          print('🗑️ Removing stale time-off item from queue (non-recoverable error)');
+          synced++; // Count as "handled"
+        }
       }
     }
 
@@ -589,7 +616,13 @@ class OfflineSyncManager {
         synced++;
       } catch (e) {
         print('❌ Failed to sync shift end: $e');
-        failedItems.add(item);
+        // Only retry if error is recoverable (network issues, etc.)
+        if (_isRecoverableError(e)) {
+          failedItems.add(item);
+        } else {
+          print('🗑️ Removing stale shift-end item from queue (non-recoverable error)');
+          synced++; // Count as "handled"
+        }
       }
     }
 
@@ -623,5 +656,48 @@ class OfflineSyncManager {
     await clearActiveBreakState();
     await clearActiveTimeOffState();
     print('🗑️ All offline data cleared');
+  }
+
+  /// Force sync and clear stale data (for manual retry from UI)
+  /// Returns a map with sync results
+  static Future<Map<String, dynamic>> forceSyncAndClearStale() async {
+    final pendingBefore = await getPendingCount();
+
+    if (!_isOnline) {
+      return {
+        'success': false,
+        'message': 'لا يوجد اتصال بالإنترنت',
+        'pendingBefore': pendingBefore,
+        'pendingAfter': pendingBefore,
+        'syncedCount': 0,
+      };
+    }
+
+    print('🔄 Force sync started - clearing stale data...');
+
+    await syncAllPendingData();
+
+    final pendingAfter = await getPendingCount();
+    final syncedCount = pendingBefore - pendingAfter;
+
+    return {
+      'success': true,
+      'message': syncedCount > 0
+          ? 'تمت مزامنة $syncedCount عملية معلقة'
+          : 'لا توجد عمليات معلقة',
+      'pendingBefore': pendingBefore,
+      'pendingAfter': pendingAfter,
+      'syncedCount': syncedCount,
+    };
+  }
+
+  /// Get detailed queue status for debugging
+  static Future<Map<String, int>> getQueueStatus() async {
+    return {
+      'breaks': (await getBreakQueue()).length,
+      'timeOffs': (await getTimeOffQueue()).length,
+      'locations': (await getLocationQueue()).length,
+      'shiftEnds': (await getShiftEndQueue()).length,
+    };
   }
 }
