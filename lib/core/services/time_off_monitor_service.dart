@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/request_model.dart';
+import '../models/shift_model.dart';
 import 'notification_service.dart';
 import 'offline_sync_manager.dart';
 
@@ -27,6 +28,9 @@ class TimeOffMonitorService {
   // Reminder minutes before end
   static const int _reminderMinutesBefore = 10;
 
+  // Threshold for considering time-off as "end of shift" (30 minutes before shift end)
+  static const int _endOfShiftThresholdMinutes = 30;
+
   // Track notification state
   static bool _reminderSent = false;
   static bool _returnAlertSent = false;
@@ -39,6 +43,7 @@ class TimeOffMonitorService {
 
   /// Start monitoring a time-off request
   /// Works offline - saves state locally for recovery
+  /// If time-off is at end of shift, auto-checkouts instead of monitoring
   static Future<void> startMonitoring({
     required String userId,
     required RequestModel timeOffRequest,
@@ -50,6 +55,21 @@ class TimeOffMonitorService {
         timeOffRequest.status != RequestStatus.approved) {
       print('⏰ Cannot monitor: not an approved time-off request');
       return;
+    }
+
+    // Check if time-off is at end of shift (no return needed)
+    final isEndOfShift = await isTimeOffAtEndOfShift(
+      employeeId: userId,
+      timeOffRequest: timeOffRequest,
+    );
+
+    if (isEndOfShift) {
+      print('⏰ Time-off is at end of shift - auto-checkout, no return needed');
+      await autoCheckoutForEndOfShiftTimeOff(
+        userId: userId,
+        timeOffRequest: timeOffRequest,
+      );
+      return; // Don't start monitoring - employee is done for the day
     }
 
     _currentUserId = userId;
@@ -709,9 +729,10 @@ class TimeOffMonitorService {
 
         final request = RequestModel.fromJson(data);
 
-        // Return if active or pending return
+        // Return if active, pending, or completed with no return (end-of-shift)
         if (request.timeOffReturnStatus == TimeOffReturnStatus.active ||
-            request.timeOffReturnStatus == TimeOffReturnStatus.pending) {
+            request.timeOffReturnStatus == TimeOffReturnStatus.pending ||
+            request.timeOffReturnStatus == TimeOffReturnStatus.completedNoReturn) {
           return request;
         }
       }
@@ -732,6 +753,187 @@ class TimeOffMonitorService {
       print('⏰ Time-off activated: $requestId');
     } catch (e) {
       print('⏰ Error activating time-off: $e');
+    }
+  }
+
+  /// Check if time-off covers the end of shift (no return needed)
+  /// Returns true if time-off end is within 30 minutes of shift end or after it
+  static Future<bool> isTimeOffAtEndOfShift({
+    required String employeeId,
+    required RequestModel timeOffRequest,
+  }) async {
+    try {
+      // Get employee's shift info
+      final userDoc = await _firestore.collection('users').doc(employeeId).get();
+      if (!userDoc.exists) return false;
+
+      final userData = userDoc.data()!;
+      final shiftId = userData['shiftId'] as String?;
+      if (shiftId == null || shiftId.isEmpty) return false;
+
+      // Get shift details
+      final shiftDoc = await _firestore.collection('shifts').doc(shiftId).get();
+      if (!shiftDoc.exists) return false;
+
+      final shiftData = shiftDoc.data()!;
+      shiftData['id'] = shiftDoc.id;
+      final shift = ShiftModel.fromJson(shiftData);
+
+      // Parse time-off end time
+      final timeOffEndTime = timeOffRequest.endTime;
+      if (timeOffEndTime == null || timeOffEndTime.isEmpty) return false;
+
+      final timeOffEndParts = timeOffEndTime.split(':');
+      if (timeOffEndParts.length != 2) return false;
+
+      final timeOffEndHour = int.tryParse(timeOffEndParts[0]) ?? 0;
+      final timeOffEndMinute = int.tryParse(timeOffEndParts[1]) ?? 0;
+
+      final now = DateTime.now();
+      final timeOffEndDateTime = DateTime(
+        now.year, now.month, now.day,
+        timeOffEndHour, timeOffEndMinute,
+      );
+
+      // Get shift end time
+      final shiftEndDateTime = shift.endDateTime(now);
+
+      // Calculate difference
+      final diffMinutes = shiftEndDateTime.difference(timeOffEndDateTime).inMinutes;
+
+      // Time-off is at end of shift if:
+      // 1. Time-off ends AT or AFTER shift end (diffMinutes <= 0)
+      // 2. OR time-off ends within threshold minutes before shift end
+      final isAtEndOfShift = diffMinutes <= _endOfShiftThresholdMinutes;
+
+      print('⏰ Time-off end: $timeOffEndTime, Shift end: ${shift.endTime}');
+      print('⏰ Diff minutes: $diffMinutes, Is at end of shift: $isAtEndOfShift');
+
+      return isAtEndOfShift;
+    } catch (e) {
+      print('⏰ Error checking if time-off is at end of shift: $e');
+      return false;
+    }
+  }
+
+  /// Get employee's shift
+  static Future<ShiftModel?> getEmployeeShift(String employeeId) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(employeeId).get();
+      if (!userDoc.exists) return null;
+
+      final userData = userDoc.data()!;
+      final shiftId = userData['shiftId'] as String?;
+      if (shiftId == null || shiftId.isEmpty) return null;
+
+      final shiftDoc = await _firestore.collection('shifts').doc(shiftId).get();
+      if (!shiftDoc.exists) return null;
+
+      final shiftData = shiftDoc.data()!;
+      shiftData['id'] = shiftDoc.id;
+      return ShiftModel.fromJson(shiftData);
+    } catch (e) {
+      print('⏰ Error getting employee shift: $e');
+      return null;
+    }
+  }
+
+  /// Auto-checkout for end-of-shift time-off (no return needed)
+  static Future<void> autoCheckoutForEndOfShiftTimeOff({
+    required String userId,
+    required RequestModel timeOffRequest,
+  }) async {
+    try {
+      print('⏰ Auto-checkout for end-of-shift time-off');
+
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+
+      // Find active attendance session for today
+      final attendanceSnapshot = await _firestore
+          .collection('attendance')
+          .where('userId', isEqualTo: userId)
+          .where('isCheckedOut', isEqualTo: false)
+          .get();
+
+      for (var doc in attendanceSnapshot.docs) {
+        final data = doc.data();
+        DateTime? checkIn;
+        if (data['checkIn'] is Timestamp) {
+          checkIn = (data['checkIn'] as Timestamp).toDate();
+        } else if (data['checkIn'] is String) {
+          checkIn = DateTime.tryParse(data['checkIn']);
+        }
+
+        if (checkIn != null && checkIn.isAfter(todayStart)) {
+          // This is today's session - auto checkout
+          final totalHours = now.difference(checkIn).inMinutes / 60.0;
+          final breakMinutes = (data['totalBreakMinutes'] as int?) ?? 0;
+          final adjustedHours = totalHours - (breakMinutes / 60.0);
+
+          // Calculate time-off minutes
+          final timeOffMinutes = timeOffRequest.durationMinutes;
+
+          await doc.reference.update({
+            'checkOut': now.toIso8601String(),
+            'totalHours': adjustedHours > 0 ? adjustedHours : 0,
+            'totalTimeOffMinutes': timeOffMinutes,
+            'isCheckedOut': true,
+            'isEarlyLeave': false, // Not early leave - time-off covered end of shift
+            'notes': 'تسجيل خروج تلقائي - زمنية حتى نهاية الدوام',
+          });
+
+          print('⏰ Auto checkout completed for end-of-shift time-off');
+          break;
+        }
+      }
+
+      // Update time-off status to completed (no return needed)
+      await _firestore.collection('requests').doc(timeOffRequest.id).update({
+        'timeOffReturnStatus': 'completedNoReturn',
+        'actualReturnTime': now.toIso8601String(),
+      });
+
+      // Notify admin
+      await _firestore.collection('notifications').add({
+        'type': 'time_off_completed_end_of_shift',
+        'title': '✅ زمنية حتى نهاية الدوام',
+        'body': '${timeOffRequest.employeeName} أخذ زمنية حتى نهاية الدوام وتم تسجيل خروجه تلقائياً',
+        'employeeId': timeOffRequest.employeeId,
+        'employeeName': timeOffRequest.employeeName,
+        'storeId': timeOffRequest.storeId,
+        'storeName': timeOffRequest.storeName,
+        'requestId': timeOffRequest.id,
+        'startTime': timeOffRequest.startTime,
+        'endTime': timeOffRequest.endTime,
+        'createdAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'forAdmin': true,
+      });
+
+      // Show notification to employee
+      await _notifications.show(
+        9004, // New notification ID for end-of-shift checkout
+        '✅ تم تسجيل خروجك',
+        'زمنيتك حتى نهاية الدوام. تم تسجيل خروجك تلقائياً. يوماً سعيداً!',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'time_off_end_of_shift',
+            'زمنية نهاية الدوام',
+            channelDescription: 'إشعارات زمنية نهاية الدوام',
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+      );
+    } catch (e) {
+      print('⏰ Error auto-checkout for end-of-shift time-off: $e');
     }
   }
 }

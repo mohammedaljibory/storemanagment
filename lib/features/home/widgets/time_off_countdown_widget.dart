@@ -47,6 +47,8 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
   StoreModel? _store;
   bool _locationCheckStarted = false; // Track if we started location monitoring
   bool _autoCheckInAttempted = false; // Prevent multiple auto check-in attempts
+  bool _isEndOfShiftTimeOff = false; // Time-off covers end of shift (no return needed)
+  bool _endOfShiftCheckoutDone = false; // Already checked out for end-of-shift
 
   @override
   void initState() {
@@ -55,6 +57,33 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
     _startCountdown();
     _loadStore(); // Only load store info, don't check location yet
     _checkAndActivateTimeOff(); // Auto-activate if start time arrived
+    _checkIfEndOfShiftTimeOff(); // Check if this is end-of-shift time-off
+  }
+
+  /// Check if this time-off covers end of shift
+  Future<void> _checkIfEndOfShiftTimeOff() async {
+    // If already completed with no return, it was end-of-shift
+    if (widget.timeOff.timeOffReturnStatus == TimeOffReturnStatus.completedNoReturn) {
+      setState(() {
+        _isEndOfShiftTimeOff = true;
+        _endOfShiftCheckoutDone = true;
+      });
+      return;
+    }
+
+    // Only check if time-off is pending (not yet started)
+    if (widget.timeOff.timeOffReturnStatus == TimeOffReturnStatus.pending) {
+      final isEndOfShift = await TimeOffMonitorService.isTimeOffAtEndOfShift(
+        employeeId: widget.userId,
+        timeOffRequest: widget.timeOff,
+      );
+
+      if (mounted && isEndOfShift) {
+        setState(() {
+          _isEndOfShiftTimeOff = true;
+        });
+      }
+    }
   }
 
   /// Check if time-off should be activated (start time arrived)
@@ -308,6 +337,53 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
+    // Determine colors and icons based on state
+    List<Color> gradientColors;
+    List<Color> iconColors;
+    IconData statusIcon;
+    String statusText;
+    Color statusTextColor;
+
+    if (_endOfShiftCheckoutDone) {
+      // Already checked out for end-of-shift time-off
+      gradientColors = [Colors.green.withOpacity(0.2), Colors.teal.withOpacity(0.2)];
+      iconColors = [Colors.green, Colors.teal];
+      statusIcon = Icons.check_circle;
+      statusText = '✅ تم تسجيل خروجك';
+      statusTextColor = Colors.green;
+    } else if (_isEndOfShiftTimeOff && !_timeOffStarted) {
+      // Pending end-of-shift time-off
+      gradientColors = [Colors.purple.withOpacity(0.15), Colors.indigo.withOpacity(0.15)];
+      iconColors = [Colors.purple, Colors.indigo];
+      statusIcon = Icons.exit_to_app;
+      statusText = '🏠 زمنية حتى نهاية الدوام';
+      statusTextColor = Colors.purple;
+    } else if (_gracePeriodExceeded) {
+      gradientColors = [Colors.red.withOpacity(0.2), Colors.red.shade900.withOpacity(0.2)];
+      iconColors = [Colors.red, Colors.red.shade900];
+      statusIcon = Icons.block;
+      statusText = '⛔ تم حظر الدخول';
+      statusTextColor = Colors.red;
+    } else if (_timeOffEnded) {
+      gradientColors = [Colors.orange.withOpacity(0.2), Colors.red.withOpacity(0.2)];
+      iconColors = [Colors.orange, Colors.red];
+      statusIcon = Icons.warning_amber_rounded;
+      statusText = 'انتهت الزمنية!';
+      statusTextColor = Colors.orange;
+    } else if (!_timeOffStarted) {
+      gradientColors = [Colors.blue.withOpacity(0.15), Colors.indigo.withOpacity(0.15)];
+      iconColors = [Colors.blue, Colors.indigo];
+      statusIcon = Icons.schedule;
+      statusText = '📅 زمنية مجدولة';
+      statusTextColor = Colors.blue;
+    } else {
+      gradientColors = [AppTheme.primaryColor.withOpacity(0.15), AppTheme.secondaryColor.withOpacity(0.15)];
+      iconColors = [AppTheme.primaryColor, AppTheme.secondaryColor];
+      statusIcon = Icons.timer;
+      statusText = '⏱️ زمنية نشطة';
+      statusTextColor = AppTheme.primaryColor;
+    }
+
     return GlassContainer(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -315,9 +391,7 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: _timeOffEnded
-                ? [Colors.orange.withOpacity(0.2), Colors.red.withOpacity(0.2)]
-                : [AppTheme.primaryColor.withOpacity(0.15), AppTheme.secondaryColor.withOpacity(0.15)],
+            colors: gradientColors,
           ),
           borderRadius: BorderRadius.circular(16),
         ),
@@ -329,32 +403,18 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: _gracePeriodExceeded
-                          ? [Colors.red, Colors.red.shade900]
-                          : (_timeOffEnded
-                              ? [Colors.orange, Colors.red]
-                              : (!_timeOffStarted
-                                  ? [Colors.blue, Colors.indigo]
-                                  : [AppTheme.primaryColor, AppTheme.secondaryColor])),
-                    ),
+                    gradient: LinearGradient(colors: iconColors),
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: (_gracePeriodExceeded
-                            ? Colors.red
-                            : (_timeOffEnded ? Colors.orange : (!_timeOffStarted ? Colors.blue : AppTheme.primaryColor))).withOpacity(0.3),
+                        color: iconColors[0].withOpacity(0.3),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
                     ],
                   ),
                   child: Icon(
-                    _gracePeriodExceeded
-                        ? Icons.block
-                        : (_timeOffEnded
-                            ? Icons.warning_amber_rounded
-                            : (!_timeOffStarted ? Icons.schedule : Icons.timer)),
+                    statusIcon,
                     color: Colors.white,
                     size: 28,
                   ),
@@ -365,23 +425,15 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _gracePeriodExceeded
-                            ? '⛔ تم حظر الدخول'
-                            : (_timeOffEnded
-                                ? 'انتهت الزمنية!'
-                                : (!_timeOffStarted ? '📅 زمنية مجدولة' : '⏱️ زمنية نشطة')),
+                        statusText,
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
-                          color: _gracePeriodExceeded
-                              ? Colors.red
-                              : (_timeOffEnded
-                                  ? Colors.orange
-                                  : (!_timeOffStarted ? Colors.blue : AppTheme.primaryColor)),
+                          color: statusTextColor,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${widget.timeOff.startTime} - ${widget.timeOff.expectedReturnTime}',
+                        '${widget.timeOff.startTime} - ${widget.timeOff.expectedReturnTime ?? widget.timeOff.endTime}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: isDarkMode ? Colors.white70 : Colors.black54,
                         ),
@@ -394,94 +446,191 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
 
             const SizedBox(height: 20),
 
-            // Countdown Timer
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
-              decoration: BoxDecoration(
-                color: (isDarkMode ? Colors.black : Colors.white).withOpacity(0.3),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: _gracePeriodExceeded
-                      ? Colors.red.withOpacity(0.5)
-                      : (_timeOffEnded
-                          ? Colors.orange.withOpacity(0.5)
-                          : (!_timeOffStarted
-                              ? Colors.blue.withOpacity(0.5)
-                              : AppTheme.primaryColor.withOpacity(0.3))),
-                  width: 2,
+            // Countdown Timer or Status Message
+            if (_endOfShiftCheckoutDone) ...[
+              // Already checked out - show success message
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+                decoration: BoxDecoration(
+                  color: Colors.green.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.green.withOpacity(0.5),
+                    width: 2,
+                  ),
                 ),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    _gracePeriodExceeded
-                        ? 'تم تجاوز فترة السماح'
-                        : (_timeOffEnded
-                            ? 'فترة السماح المتبقية'
-                            : (!_timeOffStarted ? 'تبدأ الزمنية خلال' : 'متبقي على انتهاء الزمنية')),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: _gracePeriodExceeded
-                          ? Colors.red
-                          : (_timeOffEnded
-                              ? Colors.orange
-                              : (!_timeOffStarted ? Colors.blue : (isDarkMode ? Colors.white70 : Colors.black54))),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _gracePeriodExceeded
-                        ? '00:00'
-                        : (_timeOffEnded
-                            ? _formatDuration(_graceRemaining)
-                            : (!_timeOffStarted
-                                ? _formatDuration(_timeUntilStart)
-                                : _formatDuration(_remainingTime))),
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                      color: _gracePeriodExceeded
-                          ? Colors.red
-                          : (_timeOffEnded ? Colors.orange : (!_timeOffStarted ? Colors.blue : null)),
-                      letterSpacing: 4,
-                    ),
-                  ),
-                  if (_gracePeriodExceeded) ...[
-                    const SizedBox(height: 8),
+                child: Column(
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: Colors.green, size: 48),
+                    const SizedBox(height: 12),
                     Text(
-                      'لا يمكنك الدخول مجدداً اليوم',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.red.shade700,
+                      'تم تسجيل خروجك تلقائياً',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Colors.green.shade700,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ] else if (_timeOffEnded) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'سارع بالعودة للمتجر!',
+                      'زمنيتك حتى نهاية الدوام. يوماً سعيداً! 👋',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.orange.shade700,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        color: Colors.green.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (_isEndOfShiftTimeOff && !_timeOffStarted) ...[
+              // Pending end-of-shift time-off
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+                decoration: BoxDecoration(
+                  color: (isDarkMode ? Colors.black : Colors.white).withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Colors.purple.withOpacity(0.5),
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'تبدأ الزمنية خلال',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.purple,
                       ),
                     ),
-                  ] else if (!_timeOffStarted) ...[
                     const SizedBox(height: 8),
                     Text(
-                      'ستُفعّل الزمنية تلقائياً عند وصول الوقت',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w500,
+                      _formatDuration(_timeUntilStart),
+                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        color: Colors.purple,
+                        letterSpacing: 4,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.purple.shade700, size: 18),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'سيُسجل خروجك تلقائياً عند بدء الزمنية\nلا تحتاج للعودة للعمل',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.purple.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
+            ] else ...[
+              // Regular time-off countdown
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 30),
+                decoration: BoxDecoration(
+                  color: (isDarkMode ? Colors.black : Colors.white).withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _gracePeriodExceeded
+                        ? Colors.red.withOpacity(0.5)
+                        : (_timeOffEnded
+                            ? Colors.orange.withOpacity(0.5)
+                            : (!_timeOffStarted
+                                ? Colors.blue.withOpacity(0.5)
+                                : AppTheme.primaryColor.withOpacity(0.3))),
+                    width: 2,
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      _gracePeriodExceeded
+                          ? 'تم تجاوز فترة السماح'
+                          : (_timeOffEnded
+                              ? 'فترة السماح المتبقية'
+                              : (!_timeOffStarted ? 'تبدأ الزمنية خلال' : 'متبقي على انتهاء الزمنية')),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: _gracePeriodExceeded
+                            ? Colors.red
+                            : (_timeOffEnded
+                                ? Colors.orange
+                                : (!_timeOffStarted ? Colors.blue : (isDarkMode ? Colors.white70 : Colors.black54))),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _gracePeriodExceeded
+                          ? '00:00'
+                          : (_timeOffEnded
+                              ? _formatDuration(_graceRemaining)
+                              : (!_timeOffStarted
+                                  ? _formatDuration(_timeUntilStart)
+                                  : _formatDuration(_remainingTime))),
+                      style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'monospace',
+                        color: _gracePeriodExceeded
+                            ? Colors.red
+                            : (_timeOffEnded ? Colors.orange : (!_timeOffStarted ? Colors.blue : null)),
+                        letterSpacing: 4,
+                      ),
+                    ),
+                    if (_gracePeriodExceeded) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'لا يمكنك الدخول مجدداً اليوم',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ] else if (_timeOffEnded) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'سارع بالعودة للمتجر!',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.orange.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ] else if (!_timeOffStarted) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'ستُفعّل الزمنية تلقائياً عند وصول الوقت',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
 
-            // Location Status - Only show after time-off ends
-            if (_timeOffEnded) ...[
+            // Location Status - Only show after time-off ends (not for end-of-shift time-off)
+            if (_timeOffEnded && !_isEndOfShiftTimeOff && !_endOfShiftCheckoutDone) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -525,8 +674,8 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
               ),
             ],
 
-            // Auto check-in hint
-            if (_timeOffEnded && _isInRange) ...[
+            // Auto check-in hint (not for end-of-shift time-off)
+            if (_timeOffEnded && _isInRange && !_isEndOfShiftTimeOff && !_endOfShiftCheckoutDone) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(10),
@@ -556,7 +705,7 @@ class _TimeOffCountdownWidgetState extends State<TimeOffCountdownWidget> {
                   ],
                 ),
               ),
-            ] else if (_timeOffEnded && !_isInRange) ...[
+            ] else if (_timeOffEnded && !_isInRange && !_isEndOfShiftTimeOff && !_endOfShiftCheckoutDone) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(10),

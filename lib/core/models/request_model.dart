@@ -16,11 +16,12 @@ enum RequestStatus {
 
 /// Time-off return status (for tracking employee return after time-off)
 enum TimeOffReturnStatus {
-  pending,   // لم يبدأ بعد
-  active,    // الزمنية جارية
-  returned,  // عاد في الوقت
-  late,      // عاد متأخر (ضمن فترة السماح)
-  blocked,   // حُظر من الدخول (تجاوز فترة السماح)
+  pending,          // لم يبدأ بعد
+  active,           // الزمنية جارية
+  returned,         // عاد في الوقت
+  late,             // عاد متأخر (ضمن فترة السماح)
+  blocked,          // حُظر من الدخول (تجاوز فترة السماح)
+  completedNoReturn, // زمنية حتى نهاية الدوام - لا حاجة للعودة
 }
 
 class RequestModel {

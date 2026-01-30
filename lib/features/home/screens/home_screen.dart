@@ -328,9 +328,10 @@ class _DashboardTabState extends State<DashboardTab> {
                   builder: (context, snapshot) {
                     if (snapshot.hasData && snapshot.data != null) {
                       final timeOff = snapshot.data!;
-                      // Show if time-off is active, pending, or needs activation
+                      // Show if time-off is active, pending, completed (end-of-shift), or needs activation
                       if (timeOff.timeOffReturnStatus == TimeOffReturnStatus.active ||
                           timeOff.timeOffReturnStatus == TimeOffReturnStatus.pending ||
+                          timeOff.timeOffReturnStatus == TimeOffReturnStatus.completedNoReturn ||
                           _shouldShowTimeOffWidget(timeOff)) {
                         return Column(
                           children: [
