@@ -4,6 +4,7 @@ enum RequestType {
   fullDayOff, // إجازة يوم كامل - full day leave
   shiftChange, // تغيير شفت - temporary shift change
   vacationCancellation, // طلب إلغاء إجازة - vacation cancellation request
+  breakRequest, // طلب استراحة - break during shift
 }
 
 /// Request status
@@ -242,6 +243,8 @@ class RequestModel {
         return 'تغيير شفت';
       case RequestType.vacationCancellation:
         return 'طلب إلغاء إجازة';
+      case RequestType.breakRequest:
+        return 'استراحة';
     }
   }
 

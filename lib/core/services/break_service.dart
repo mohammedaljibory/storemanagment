@@ -75,6 +75,7 @@ class BreakService extends ChangeNotifier {
     required String userName,
     required String storeId,
     required String storeName,
+    String? reason,
   }) async {
     if (_isOnBreak || _hasPendingRequest) {
       return false;
@@ -90,6 +91,7 @@ class BreakService extends ChangeNotifier {
       'requestedAt': now.toIso8601String(),
       'status': 'pending',
       'allowedMinutes': allowedBreakMinutes,
+      if (reason != null && reason.isNotEmpty) 'reason': reason,
     };
 
     // Check connectivity
@@ -108,10 +110,13 @@ class BreakService extends ChangeNotifier {
         _requestStatus = BreakRequestStatus.pending;
 
         // Notify admin about break request
+        final notificationBody = reason != null && reason.isNotEmpty
+            ? '$userName يطلب استراحة: $reason'
+            : '$userName يطلب استراحة لمدة $allowedBreakMinutes دقيقة';
         await _firestore.collection('notifications').add({
           'type': 'break_request',
           'title': 'طلب استراحة',
-          'body': '$userName يطلب استراحة لمدة $allowedBreakMinutes دقيقة',
+          'body': notificationBody,
           'userId': userId,
           'userName': userName,
           'storeId': storeId,

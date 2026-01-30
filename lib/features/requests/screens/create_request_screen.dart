@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/providers/request_provider.dart';
+import '../../../core/providers/attendance_provider.dart';
 import '../../../core/models/request_model.dart';
 import '../../../core/models/user_model.dart';
+import '../../../core/services/break_service.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 
@@ -82,12 +84,17 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
                       const SizedBox(height: 24),
 
+                      // Break request info (check active attendance)
+                      if (_selectedType == RequestType.breakRequest)
+                        _buildBreakRequestSection(),
+
                       // Multi-day toggle (for vacation)
                       if (_selectedType == RequestType.fullDayOff)
                         _buildMultiDaySection(user, hasBalance, remainingBalance),
 
-                      // Date Selection
-                      _buildDateSection(),
+                      // Date Selection (not for break requests)
+                      if (_selectedType != RequestType.breakRequest)
+                        _buildDateSection(),
 
                       // End Date (for multi-day)
                       if (_isMultiDay) _buildEndDateSection(user, remainingBalance),
@@ -185,13 +192,22 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
             children: [
               Expanded(
                 child: _buildTypeCard(
+                  type: RequestType.breakRequest,
+                  icon: Icons.coffee,
+                  label: 'استراحة',
+                  description: 'طلب استراحة أثناء الدوام',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildTypeCard(
                   type: RequestType.timeOff,
                   icon: Icons.timer_outlined,
                   label: 'زمنية',
                   description: 'استئذان لفترة محددة',
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildTypeCard(
                   type: RequestType.fullDayOff,
@@ -218,7 +234,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       onTap: () {
         setState(() {
           _selectedType = type;
-          if (type == RequestType.timeOff) {
+          if (type == RequestType.timeOff || type == RequestType.breakRequest) {
             _isMultiDay = false;
             _endDate = null;
           }
@@ -265,6 +281,87 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildBreakRequestSection() {
+    final attendanceProvider = context.watch<AttendanceProvider>();
+    final hasActiveAttendance = attendanceProvider.currentAttendance != null;
+
+    return Column(
+      children: [
+        GlassContainer(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (hasActiveAttendance ? AppTheme.successColor : AppTheme.errorColor)
+                          .withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      hasActiveAttendance ? Icons.check_circle : Icons.warning_amber,
+                      color: hasActiveAttendance ? AppTheme.successColor : AppTheme.errorColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hasActiveAttendance ? 'حضور نشط' : 'لا يوجد حضور نشط',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: hasActiveAttendance ? AppTheme.successColor : AppTheme.errorColor,
+                          ),
+                        ),
+                        Text(
+                          hasActiveAttendance
+                              ? 'يمكنك طلب استراحة الآن'
+                              : 'يجب تسجيل الحضور أولاً لطلب استراحة',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (hasActiveAttendance) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 18, color: Colors.blue),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'مدة الاستراحة المسموحة: 60 دقيقة\nسيتم إرسال الطلب للموافقة من المدير',
+                          style: TextStyle(fontSize: 12, color: Colors.blue),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
@@ -856,6 +953,12 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
       return;
     }
 
+    // Handle break request separately
+    if (_selectedType == RequestType.breakRequest) {
+      await _submitBreakRequest(user);
+      return;
+    }
+
     // Validate multi-day vacation
     if (_selectedType == RequestType.fullDayOff && _isMultiDay && _endDate == null) {
       _showSnackBar('يرجى اختيار تاريخ النهاية', isError: true);
@@ -920,6 +1023,44 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
     } else {
       setState(() => _isSubmitting = false);
       _showSnackBar(requestProvider.errorMessage ?? 'فشل في إرسال الطلب', isError: true);
+    }
+  }
+
+  Future<void> _submitBreakRequest(UserModel user) async {
+    final attendanceProvider = context.read<AttendanceProvider>();
+    final currentAttendance = attendanceProvider.currentAttendance;
+
+    // Validate active attendance
+    if (currentAttendance == null) {
+      _showSnackBar('يجب تسجيل الحضور أولاً لطلب استراحة', isError: true);
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final breakService = BreakService();
+      final success = await breakService.requestBreak(
+        attendanceId: currentAttendance.id,
+        userId: user.id,
+        userName: user.name,
+        storeId: user.storeId ?? '',
+        storeName: user.storeName ?? '',
+        reason: _reasonController.text.trim(),
+      );
+
+      if (success) {
+        if (mounted) {
+          Navigator.pop(context, true);
+          _showSnackBar('تم إرسال طلب الاستراحة بنجاح');
+        }
+      } else {
+        setState(() => _isSubmitting = false);
+        _showSnackBar('فشل في إرسال طلب الاستراحة', isError: true);
+      }
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      _showSnackBar('حدث خطأ: $e', isError: true);
     }
   }
 
