@@ -530,6 +530,7 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
     TimeOfDay startTime = const TimeOfDay(hour: 9, minute: 0);
     TimeOfDay endTime = const TimeOfDay(hour: 12, minute: 0);
     final reasonController = TextEditingController();
+    bool isSubmitting = false; // Prevent double-tap
 
     showDialog(
       context: context,
@@ -929,11 +930,11 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: isSubmitting ? null : () => Navigator.pop(context),
                 child: const Text('إلغاء'),
               ),
               ElevatedButton(
-                onPressed: () async {
+                onPressed: isSubmitting ? null : () async {
                   if (reasonController.text.trim().isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('يرجى كتابة سبب الطلب')),
@@ -960,6 +961,11 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     return;
                   }
 
+                  // Prevent double-tap - set loading state
+                  setState(() {
+                    isSubmitting = true;
+                  });
+
                   int? durationMinutes;
                   String? startTimeStr;
                   String? endTimeStr;
@@ -973,6 +979,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                     durationMinutes = endMinutes - startMinutes;
 
                     if (durationMinutes <= 0) {
+                      setState(() {
+                        isSubmitting = false;
+                      });
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('وقت النهاية يجب أن يكون بعد وقت البداية')),
                       );
@@ -1013,6 +1022,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                       ),
                     );
                   } else {
+                    setState(() {
+                      isSubmitting = false;
+                    });
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(requestProvider.errorMessage ?? 'فشل في إرسال الطلب'),
@@ -1024,7 +1036,16 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryColor,
                 ),
-                child: const Text('إرسال الطلب'),
+                child: isSubmitting
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text('إرسال الطلب'),
               ),
             ],
           );

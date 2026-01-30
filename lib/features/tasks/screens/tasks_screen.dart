@@ -153,7 +153,46 @@ class _TasksScreenState extends State<TasksScreen> with SingleTickerProviderStat
                             return const Center(child: CircularProgressIndicator());
                           }
 
-                          final tasks = snapshot.data ?? [];
+                          final allTasks = snapshot.data ?? [];
+                          final authProv = context.read<AuthProvider>();
+
+                          // For employees: filter recurring tasks to show only today's tasks
+                          // For admins: show all tasks
+                          List<TaskModel> tasks;
+                          if (authProv.isAdmin) {
+                            tasks = allTasks;
+                          } else {
+                            // Filter recurring tasks - only show today's tasks
+                            final now = DateTime.now();
+                            final todayStart = DateTime(now.year, now.month, now.day);
+                            final todayEnd = todayStart.add(const Duration(days: 1));
+
+                            tasks = allTasks.where((task) {
+                              // Non-recurring tasks: show all
+                              if (!task.isRepeating && task.repeatType == TaskRepeatType.none) {
+                                return true;
+                              }
+
+                              // Recurring tasks: only show if deadline is today or task is in progress/waiting approval
+                              // Also show overdue recurring tasks
+                              if (task.status == TaskStatus.inProgress ||
+                                  task.status == TaskStatus.waitingApproval) {
+                                return true; // Always show tasks in progress
+                              }
+
+                              // Show if deadline is today
+                              final isToday = task.deadline.isAfter(todayStart.subtract(const Duration(seconds: 1))) &&
+                                              task.deadline.isBefore(todayEnd);
+
+                              // Also show if overdue and still pending
+                              final isOverdue = task.deadline.isBefore(now) &&
+                                                (task.status == TaskStatus.pending ||
+                                                 task.status == TaskStatus.rejected);
+
+                              return isToday || isOverdue;
+                            }).toList();
+                          }
+
                           final pendingTasks = tasks
                               .where((t) => t.status == TaskStatus.pending)
                               .toList();
