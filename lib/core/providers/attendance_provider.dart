@@ -325,6 +325,7 @@ class AttendanceProvider extends ChangeNotifier {
       }
 
       // 1.5. Check if employee is blocked due to time-off (زمنية)
+      bool returningFromTimeOff = false;
       final timeOffStatus = await TimeOffMonitorService.checkTimeOffBlockStatus(userId);
       if (timeOffStatus != null) {
         if (timeOffStatus['blocked'] == true) {
@@ -342,23 +343,39 @@ class AttendanceProvider extends ChangeNotifier {
 
           // Mark as returned from time-off
           await TimeOffMonitorService.markAsReturned();
+          returningFromTimeOff = true;
+        }
+
+        // Employee is returning from time-off on time
+        final request = timeOffStatus['request'] as RequestModel?;
+        if (request != null &&
+            request.timeOffReturnStatus == TimeOffReturnStatus.active &&
+            request.isExpectedReturnTimePassed) {
+          print('⏰ Employee returning from time-off on time');
+          await TimeOffMonitorService.markAsReturned();
+          returningFromTimeOff = true;
         }
       }
 
-      // 2. Validate work day (skip for secondary stores)
-      if (!skipTimeValidation && !shift.isWorkDay(now)) {
+      // 2. Validate work day (skip for secondary stores or returning from time-off)
+      final shouldSkipTimeValidation = skipTimeValidation || returningFromTimeOff;
+      if (!shouldSkipTimeValidation && !shift.isWorkDay(now)) {
         _isLoading = false;
         _errorMessage = 'اليوم ليس من أيام عملك\nأيام العمل: ${shift.workDaysText}';
         notifyListeners();
         return false;
       }
 
-      // 4. Validate time window (skip for secondary stores)
+      // 4. Validate time window (skip for secondary stores or returning from time-off)
       Map<String, dynamic> checkInResult;
-      if (skipTimeValidation) {
-        // For secondary stores, allow check-in anytime but still calculate late info
+      if (shouldSkipTimeValidation) {
+        // For secondary stores or returning from time-off, allow check-in anytime
         checkInResult = {'allowed': true, 'isLate': false, 'lateMinutes': 0};
-        print('📍 Secondary store check-in: skipping time validation');
+        if (returningFromTimeOff) {
+          print('⏰ Returning from time-off: skipping time validation');
+        } else {
+          print('📍 Secondary store check-in: skipping time validation');
+        }
       } else {
         checkInResult = shift.canCheckIn(now);
         if (!checkInResult['allowed']) {

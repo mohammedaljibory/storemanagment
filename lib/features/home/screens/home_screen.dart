@@ -320,16 +320,18 @@ class _DashboardTabState extends State<DashboardTab> {
                 const SizedBox(height: 15),
               ],
 
-              // Time-Off Countdown Widget (when employee is on active time-off)
-              if (user != null && !attendanceProvider.isCheckedIn)
+              // Time-Off Countdown Widget (when employee has active time-off)
+              // Show regardless of check-in status
+              if (user != null)
                 FutureBuilder(
                   future: TimeOffMonitorService.getActiveTimeOffToday(user.id),
                   builder: (context, snapshot) {
                     if (snapshot.hasData && snapshot.data != null) {
                       final timeOff = snapshot.data!;
-                      // Only show if time-off is active and hasn't returned yet
+                      // Show if time-off is active, pending, or needs activation
                       if (timeOff.timeOffReturnStatus == TimeOffReturnStatus.active ||
-                          timeOff.timeOffReturnStatus == TimeOffReturnStatus.pending) {
+                          timeOff.timeOffReturnStatus == TimeOffReturnStatus.pending ||
+                          _shouldShowTimeOffWidget(timeOff)) {
                         return Column(
                           children: [
                             TimeOffCountdownWidget(
@@ -1966,6 +1968,50 @@ class _DashboardTabState extends State<DashboardTab> {
         ),
       ),
     );
+  }
+
+  /// Check if time-off widget should be shown
+  /// Shows when time-off is approved and:
+  /// - Current time is within time-off period, OR
+  /// - Current time is within grace period after expected return
+  bool _shouldShowTimeOffWidget(RequestModel timeOff) {
+    if (timeOff.status != RequestStatus.approved) return false;
+    if (timeOff.type != RequestType.timeOff) return false;
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Check if this is today's time-off
+    if (timeOff.targetDate == null) return false;
+    final targetDate = DateTime(
+      timeOff.targetDate!.year,
+      timeOff.targetDate!.month,
+      timeOff.targetDate!.day,
+    );
+    if (targetDate != today) return false;
+
+    // Parse start time
+    if (timeOff.startTime == null) return false;
+    final startParts = timeOff.startTime!.split(':');
+    if (startParts.length != 2) return false;
+    final startHour = int.tryParse(startParts[0]) ?? 0;
+    final startMinute = int.tryParse(startParts[1]) ?? 0;
+    final startDateTime = DateTime(now.year, now.month, now.day, startHour, startMinute);
+
+    // Parse expected return time
+    if (timeOff.expectedReturnTime == null) return false;
+    final endParts = timeOff.expectedReturnTime!.split(':');
+    if (endParts.length != 2) return false;
+    final endHour = int.tryParse(endParts[0]) ?? 0;
+    final endMinute = int.tryParse(endParts[1]) ?? 0;
+    final endDateTime = DateTime(now.year, now.month, now.day, endHour, endMinute);
+
+    // Calculate deadline with grace period
+    final deadline = endDateTime.add(Duration(minutes: timeOff.graceMinutes));
+
+    // Show if we're between start time and deadline (including grace period)
+    return now.isAfter(startDateTime.subtract(const Duration(minutes: 30))) &&
+        now.isBefore(deadline);
   }
 }
 
