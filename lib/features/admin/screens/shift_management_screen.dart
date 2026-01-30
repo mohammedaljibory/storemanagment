@@ -5,6 +5,7 @@ import '../../../core/providers/store_provider.dart';
 import '../../../core/models/shift_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/routes/app_routes.dart';
 
 class ShiftManagementScreen extends StatefulWidget {
   const ShiftManagementScreen({Key? key}) : super(key: key);
@@ -167,7 +168,22 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddEditShiftDialog(context),
+        onPressed: () {
+          if (_selectedStoreId == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('يرجى اختيار المتجر أولاً')),
+            );
+            return;
+          }
+          Navigator.pushNamed(
+            context,
+            AppRoutes.createEditShift,
+            arguments: {
+              'storeId': _selectedStoreId,
+              'shift': null,
+            },
+          );
+        },
         icon: const Icon(Icons.add),
         label: const Text('إضافة شفت'),
         backgroundColor: AppTheme.primaryColor,
@@ -223,7 +239,14 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
               PopupMenuButton<String>(
                 onSelected: (value) {
                   if (value == 'edit') {
-                    _showAddEditShiftDialog(context, shift: shift);
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.createEditShift,
+                      arguments: {
+                        'storeId': _selectedStoreId,
+                        'shift': shift,
+                      },
+                    );
                   } else if (value == 'delete') {
                     _showDeleteConfirmation(context, shift);
                   }
@@ -379,321 +402,6 @@ class _ShiftManagementScreenState extends State<ShiftManagementScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showAddEditShiftDialog(BuildContext context, {ShiftModel? shift}) {
-    final isEdit = shift != null;
-    final nameController = TextEditingController(text: shift?.name);
-    
-    TimeOfDay startTime = shift != null
-        ? TimeOfDay(
-            hour: int.parse(shift.startTime.split(':')[0]),
-            minute: int.parse(shift.startTime.split(':')[1]),
-          )
-        : const TimeOfDay(hour: 8, minute: 0);
-    
-    TimeOfDay endTime = shift != null
-        ? TimeOfDay(
-            hour: int.parse(shift.endTime.split(':')[0]),
-            minute: int.parse(shift.endTime.split(':')[1]),
-          )
-        : const TimeOfDay(hour: 14, minute: 0);
-
-    List<int> selectedDays = shift?.workDays ?? [0, 1, 2, 3, 4, 5];
-    
-    int lateToleranceMinutes = shift?.lateToleranceMinutes ?? 15;
-    int maxLateMinutes = shift?.maxLateMinutes ?? 60;
-    int checkInWindowMinutes = shift?.checkInWindowMinutes ?? 30;
-    int checkOutWindowMinutes = shift?.checkOutWindowMinutes ?? 15;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                Icon(
-                  isEdit ? Icons.edit : Icons.add,
-                  color: AppTheme.primaryColor,
-                ),
-                const SizedBox(width: 10),
-                Text(isEdit ? 'تعديل الشفت' : 'إضافة شفت جديد'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Name
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسم الشفت',
-                      prefixIcon: Icon(Icons.label),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Time Pickers
-                  const Text('وقت العمل', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildTimePicker(
-                          context,
-                          'البداية',
-                          startTime,
-                          AppTheme.successColor,
-                          (time) => setState(() => startTime = time),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _buildTimePicker(
-                          context,
-                          'النهاية',
-                          endTime,
-                          AppTheme.errorColor,
-                          (time) => setState(() => endTime = time),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Work Days
-                  const Text('أيام العمل', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    children: List.generate(7, (index) {
-                      const days = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
-                      final isSelected = selectedDays.contains(index);
-                      return FilterChip(
-                        label: Text(days[index]),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              selectedDays.add(index);
-                            } else {
-                              selectedDays.remove(index);
-                            }
-                          });
-                        },
-                        selectedColor: AppTheme.primaryColor.withOpacity(0.2),
-                        checkmarkColor: AppTheme.primaryColor,
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Time Rules
-                  const Text('قواعد الوقت', style: TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  
-                  // Late Tolerance
-                  _buildSliderSetting(
-                    'سماحية التأخير (قبل احتساب متأخر)',
-                    lateToleranceMinutes,
-                    0,
-                    60,
-                    'دقيقة',
-                    AppTheme.warningColor,
-                    (value) => setState(() => lateToleranceMinutes = value.toInt()),
-                  ),
-                  
-                  // Max Late
-                  _buildSliderSetting(
-                    'الحد الأقصى للتأخير (بعده يُرفض الدخول)',
-                    maxLateMinutes,
-                    15,
-                    120,
-                    'دقيقة',
-                    AppTheme.errorColor,
-                    (value) => setState(() => maxLateMinutes = value.toInt()),
-                  ),
-                  
-                  // Check-in Window
-                  _buildSliderSetting(
-                    'نافذة الدخول (قبل البداية)',
-                    checkInWindowMinutes,
-                    0,
-                    60,
-                    'دقيقة',
-                    AppTheme.primaryColor,
-                    (value) => setState(() => checkInWindowMinutes = value.toInt()),
-                  ),
-                  
-                  // Check-out Window
-                  _buildSliderSetting(
-                    'حد الخروج المبكر (قبل النهاية)',
-                    checkOutWindowMinutes,
-                    0,
-                    60,
-                    'دقيقة',
-                    AppTheme.secondaryColor,
-                    (value) => setState(() => checkOutWindowMinutes = value.toInt()),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (nameController.text.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('يرجى إدخال اسم الشفت')),
-                    );
-                    return;
-                  }
-                  if (_selectedStoreId == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('يرجى اختيار المتجر أولاً')),
-                    );
-                    return;
-                  }
-
-                  final shiftProvider = Provider.of<ShiftProvider>(context, listen: false);
-
-                  final newShift = ShiftModel(
-                    id: shift?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                    storeId: _selectedStoreId!,
-                    name: nameController.text,
-                    startTime: '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')}',
-                    endTime: '${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}',
-                    workDays: selectedDays..sort(),
-                    lateToleranceMinutes: lateToleranceMinutes,
-                    maxLateMinutes: maxLateMinutes,
-                    checkInWindowMinutes: checkInWindowMinutes,
-                    checkOutWindowMinutes: checkOutWindowMinutes,
-                    createdAt: shift?.createdAt ?? DateTime.now(),
-                  );
-
-                  if (isEdit) {
-                    shiftProvider.updateShift(newShift);
-                  } else {
-                    shiftProvider.createShift(newShift);
-                  }
-
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                ),
-                child: Text(isEdit ? 'تحديث' : 'إضافة'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildTimePicker(
-    BuildContext context,
-    String label,
-    TimeOfDay time,
-    Color color,
-    Function(TimeOfDay) onChanged,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showTimePicker(
-          context: context,
-          initialTime: time,
-        );
-        if (picked != null) {
-          onChanged(picked);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(color: color),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSliderSetting(
-    String label,
-    int value,
-    double min,
-    double max,
-    String unit,
-    Color color,
-    Function(double) onChanged,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '$value $unit',
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-        Slider(
-          value: value.toDouble(),
-          min: min,
-          max: max,
-          divisions: (max - min).toInt(),
-          activeColor: color,
-          onChanged: onChanged,
-        ),
-        const SizedBox(height: 10),
-      ],
     );
   }
 

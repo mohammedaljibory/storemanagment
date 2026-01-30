@@ -14,12 +14,21 @@ import '../../features/admin/screens/employees_screen.dart';
 import '../../features/admin/screens/employee_detail_screen.dart';
 import '../../features/admin/screens/free_employee_location_screen.dart';
 import '../../features/requests/screens/requests_screen.dart' as req_screen;
+import '../../features/requests/screens/create_request_screen.dart';
 import '../../features/admin/screens/admin_requests_screen.dart';
 import '../../features/admin/screens/active_employees_by_store_screen.dart';
 import '../../features/admin/screens/vacation_employees_by_store_screen.dart';
 import '../../features/admin/screens/tasks_by_employee_screen.dart';
 import '../../features/admin/screens/employee_report_screen.dart';
+import '../../features/admin/screens/create_edit_shift_screen.dart';
+import '../../features/admin/screens/create_edit_employee_screen.dart';
+import '../../features/admin/screens/create_edit_store_screen.dart';
+import '../../features/admin/screens/add_overtime_screen.dart';
+import '../../features/tasks/screens/edit_task_screen.dart';
 import '../models/user_model.dart';
+import '../models/task_model.dart';
+import '../models/store_model.dart';
+import '../models/shift_model.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -37,12 +46,18 @@ class AppRoutes {
   static const String employees = '/employees';
   static const String employeeDetail = '/employee-detail';
   static const String requests = '/requests';
+  static const String createRequest = '/create-request';
   static const String adminRequests = '/admin-requests';
   static const String activeEmployeesByStore = '/active-employees-by-store';
   static const String vacationEmployeesByStore = '/vacation-employees-by-store';
   static const String tasksByEmployee = '/tasks-by-employee';
   static const String employeeReport = '/employee-report';
   static const String freeEmployeeLocation = '/free-employee-location';
+  static const String createEditShift = '/create-edit-shift';
+  static const String createEditEmployee = '/create-edit-employee';
+  static const String createEditStore = '/create-edit-store';
+  static const String addOvertime = '/add-overtime';
+  static const String editTask = '/edit-task';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -76,6 +91,8 @@ class AppRoutes {
         return _buildRoute(EmployeeDetailScreen(employeeId: employeeId));
       case requests:
         return _buildRoute(const req_screen.RequestsScreen());
+      case createRequest:
+        return _buildRoute(const CreateRequestScreen());
       case adminRequests:
         return _buildRoute(const AdminRequestsScreen());
       case activeEmployeesByStore:
@@ -92,6 +109,23 @@ class AppRoutes {
           employee: args['employee'] as UserModel,
           attendanceId: args['attendanceId'] as String?,
         ));
+      case createEditShift:
+        final args = settings.arguments as Map<String, dynamic>;
+        return _buildRoute(CreateEditShiftScreen(
+          storeId: args['storeId'] as String,
+          shift: args['shift'] as ShiftModel?,
+        ));
+      case createEditEmployee:
+        final employee = settings.arguments as UserModel?;
+        return _buildRoute(CreateEditEmployeeScreen(employee: employee));
+      case createEditStore:
+        final store = settings.arguments as StoreModel?;
+        return _buildRoute(CreateEditStoreScreen(store: store));
+      case addOvertime:
+        return _buildRoute(const AddOvertimeScreen());
+      case editTask:
+        final task = settings.arguments as TaskModel;
+        return _buildRoute(EditTaskScreen(task: task));
       default:
         return _buildRoute(
           Scaffold(

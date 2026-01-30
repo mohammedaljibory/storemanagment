@@ -7,6 +7,7 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/models/store_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/routes/app_routes.dart';
 
 class StoreManagementScreen extends StatefulWidget {
   const StoreManagementScreen({Key? key}) : super(key: key);
@@ -121,7 +122,9 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddEditStoreDialog(context),
+        onPressed: () {
+          Navigator.pushNamed(context, AppRoutes.createEditStore);
+        },
         icon: const Icon(Icons.add),
         label: const Text('إضافة متجر'),
         backgroundColor: AppTheme.primaryColor,
@@ -191,7 +194,11 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
               PopupMenuButton<String>(
                 onSelected: (value) {
                   if (value == 'edit') {
-                    _showAddEditStoreDialog(context, store: store);
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.createEditStore,
+                      arguments: store,
+                    );
                   } else if (value == 'delete') {
                     _showDeleteConfirmation(context, store);
                   } else if (value == 'viewMap') {
@@ -286,278 +293,6 @@ class _StoreManagementScreenState extends State<StoreManagementScreen> {
         ],
       ),
     );
-  }
-
-  void _showAddEditStoreDialog(BuildContext context, {StoreModel? store}) {
-    final isEdit = store != null;
-    final nameController = TextEditingController(text: store?.name);
-    final addressController = TextEditingController(text: store?.address);
-    final phoneController = TextEditingController(text: store?.phone);
-    final radiusController = TextEditingController(
-      text: store?.allowedRadius.toString() ?? '100',
-    );
-    final monitoringRadiusController = TextEditingController(
-      text: store?.monitoringRadius.toString() ?? '400',
-    );
-
-    double? selectedLat = store?.latitude;
-    double? selectedLng = store?.longitude;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: Row(
-              children: [
-                Icon(
-                  isEdit ? Icons.edit : Icons.add_business,
-                  color: AppTheme.primaryColor,
-                ),
-                const SizedBox(width: 10),
-                Text(isEdit ? 'تعديل المتجر' : 'إضافة متجر جديد'),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسم المتجر',
-                      prefixIcon: Icon(Icons.store),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'العنوان',
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'رقم الهاتف',
-                      prefixIcon: Icon(Icons.phone),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: radiusController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'نطاق الحضور والانصراف (متر)',
-                      prefixIcon: Icon(Icons.my_location),
-                      helperText: 'المسافة المسموحة لتسجيل الحضور والخروج',
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: monitoringRadiusController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'نطاق المراقبة أثناء الدوام (متر)',
-                      prefixIcon: Icon(Icons.radar),
-                      helperText: 'المسافة التي يُسمح للموظف بالابتعاد فيها أثناء العمل',
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Location Picker Button
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: selectedLat != null 
-                            ? AppTheme.successColor 
-                            : Colors.grey.shade400,
-                        width: 2,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              selectedLat != null ? Icons.check_circle : Icons.gps_fixed,
-                              color: selectedLat != null 
-                                  ? AppTheme.successColor 
-                                  : AppTheme.primaryColor,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                selectedLat != null
-                                    ? 'تم تحديد الموقع'
-                                    : 'موقع المتجر (مطلوب)',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: selectedLat != null 
-                                      ? AppTheme.successColor 
-                                      : null,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (selectedLat != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'الإحداثيات: ${selectedLat!.toStringAsFixed(4)}, ${selectedLng!.toStringAsFixed(4)}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () async {
-                                  // Get current location
-                                  final position = await _getCurrentLocation();
-                                  if (position != null) {
-                                    setState(() {
-                                      selectedLat = position.latitude;
-                                      selectedLng = position.longitude;
-                                    });
-                                  }
-                                },
-                                icon: const Icon(Icons.my_location, size: 18),
-                                label: const Text('موقعي الحالي'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  final result = await Navigator.push<LatLng>(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => MapPickerScreen(
-                                        initialLat: selectedLat,
-                                        initialLng: selectedLng,
-                                      ),
-                                    ),
-                                  );
-                                  if (result != null) {
-                                    setState(() {
-                                      selectedLat = result.latitude;
-                                      selectedLng = result.longitude;
-                                    });
-                                  }
-                                },
-                                icon: const Icon(Icons.map, size: 18),
-                                label: const Text('اختر من الخريطة'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primaryColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('إلغاء'),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (nameController.text.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('يرجى إدخال اسم المتجر')),
-                    );
-                    return;
-                  }
-                  if (selectedLat == null || selectedLng == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('يرجى تحديد موقع المتجر على الخريطة')),
-                    );
-                    return;
-                  }
-
-                  final storeProvider = Provider.of<StoreProvider>(context, listen: false);
-                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-                  final newStore = StoreModel(
-                    id: store?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-                    name: nameController.text,
-                    address: addressController.text,
-                    adminId: authProvider.user!.id,
-                    phone: phoneController.text,
-                    latitude: selectedLat!,
-                    longitude: selectedLng!,
-                    allowedRadius: double.tryParse(radiusController.text) ?? 100,
-                    monitoringRadius: double.tryParse(monitoringRadiusController.text) ?? 400,
-                    createdAt: store?.createdAt ?? DateTime.now(),
-                  );
-
-                  if (isEdit) {
-                    storeProvider.updateStore(newStore);
-                  } else {
-                    storeProvider.createStore(newStore);
-                  }
-
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryColor,
-                ),
-                child: Text(isEdit ? 'تحديث' : 'إضافة'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Future<Position?> _getCurrentLocation() async {
-    try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('يرجى تفعيل خدمة الموقع')),
-        );
-        return null;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('يرجى السماح بالوصول للموقع')),
-          );
-          return null;
-        }
-      }
-
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('فشل في الحصول على الموقع')),
-      );
-      return null;
-    }
   }
 
   void _showMapPreview(BuildContext context, StoreModel store) {
