@@ -10,14 +10,16 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
 
 class CreateRequestScreen extends StatefulWidget {
-  const CreateRequestScreen({Key? key}) : super(key: key);
+  final RequestType? initialType;
+
+  const CreateRequestScreen({Key? key, this.initialType}) : super(key: key);
 
   @override
   State<CreateRequestScreen> createState() => _CreateRequestScreenState();
 }
 
 class _CreateRequestScreenState extends State<CreateRequestScreen> {
-  RequestType _selectedType = RequestType.timeOff;
+  late RequestType _selectedType;
   DateTime _startDate = DateTime.now().add(const Duration(days: 1));
   DateTime? _endDate;
   bool _isMultiDay = false;
@@ -26,6 +28,12 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
   TimeOfDay _endTime = const TimeOfDay(hour: 12, minute: 0);
   final _reasonController = TextEditingController();
   bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedType = widget.initialType ?? RequestType.timeOff;
+  }
 
   @override
   void dispose() {

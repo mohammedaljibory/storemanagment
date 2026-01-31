@@ -29,6 +29,7 @@ import '../models/user_model.dart';
 import '../models/task_model.dart';
 import '../models/store_model.dart';
 import '../models/shift_model.dart';
+import '../models/request_model.dart';
 
 class AppRoutes {
   static const String splash = '/';
@@ -92,7 +93,8 @@ class AppRoutes {
       case requests:
         return _buildRoute(const req_screen.RequestsScreen());
       case createRequest:
-        return _buildRoute(const CreateRequestScreen());
+        final initialType = settings.arguments as RequestType?;
+        return _buildRoute(CreateRequestScreen(initialType: initialType));
       case adminRequests:
         return _buildRoute(const AdminRequestsScreen());
       case activeEmployeesByStore:

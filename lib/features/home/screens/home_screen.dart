@@ -460,7 +460,7 @@ class _DashboardTabState extends State<DashboardTab> {
 
               const SizedBox(height: 15),
 
-              // NEW: Quick action buttons
+              // Quick action buttons - direct navigation to create request
               Row(
                 children: [
                   Expanded(
@@ -470,13 +470,12 @@ class _DashboardTabState extends State<DashboardTab> {
                       Icons.event_busy,
                       AppTheme.accentColor,
                       onTap: () {
-                        // Navigate to requests tab (index 3)
-                        final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                        if (homeState != null) {
-                          homeState.setState(() {
-                            homeState._currentIndex = 3;
-                          });
-                        }
+                        // Navigate directly to create request with fullDayOff type
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.createRequest,
+                          arguments: RequestType.fullDayOff,
+                        );
                       },
                     ),
                   ),
@@ -488,12 +487,12 @@ class _DashboardTabState extends State<DashboardTab> {
                       Icons.timer_outlined,
                       AppTheme.primaryColor,
                       onTap: () {
-                        final homeState = context.findAncestorStateOfType<_HomeScreenState>();
-                        if (homeState != null) {
-                          homeState.setState(() {
-                            homeState._currentIndex = 3;
-                          });
-                        }
+                        // Navigate directly to create request with timeOff type
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.createRequest,
+                          arguments: RequestType.timeOff,
+                        );
                       },
                     ),
                   ),
