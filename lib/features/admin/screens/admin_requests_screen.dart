@@ -314,6 +314,9 @@ class _AdminRequestsScreenState extends State<AdminRequestsScreen> with SingleTi
       case RequestType.vacationCancellation:
         typeIcon = Icons.event_busy;
         break;
+      case RequestType.breakRequest:
+        typeIcon = Icons.coffee;
+        break;
     }
 
     return GlassContainer(

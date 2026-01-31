@@ -286,7 +286,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
   Widget _buildBreakRequestSection() {
     final attendanceProvider = context.watch<AttendanceProvider>();
-    final hasActiveAttendance = attendanceProvider.currentAttendance != null;
+    final hasActiveAttendance = attendanceProvider.currentSession != null;
 
     return Column(
       children: [
@@ -1028,7 +1028,7 @@ class _CreateRequestScreenState extends State<CreateRequestScreen> {
 
   Future<void> _submitBreakRequest(UserModel user) async {
     final attendanceProvider = context.read<AttendanceProvider>();
-    final currentAttendance = attendanceProvider.currentAttendance;
+    final currentAttendance = attendanceProvider.currentSession;
 
     // Validate active attendance
     if (currentAttendance == null) {

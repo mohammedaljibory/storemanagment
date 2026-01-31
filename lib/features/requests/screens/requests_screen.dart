@@ -352,6 +352,9 @@ class _RequestsScreenState extends State<RequestsScreen> with SingleTickerProvid
       case RequestType.vacationCancellation:
         typeIcon = Icons.event_busy;
         break;
+      case RequestType.breakRequest:
+        typeIcon = Icons.coffee;
+        break;
     }
 
     return GlassContainer(
