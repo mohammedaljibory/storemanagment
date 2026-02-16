@@ -8,10 +8,11 @@ import '../services/notification_service.dart';
 class TaskProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
-  
+
   List<TaskModel> _tasks = [];
   bool _isLoading = false;
   String? _errorMessage;
+  bool _isCheckingRepeatingTasks = false; // Mutex to prevent concurrent recurring task checks
 
   // ============ GETTERS ============
   List<TaskModel> get tasks => [..._tasks];
@@ -549,34 +550,42 @@ class TaskProvider extends ChangeNotifier {
 
   /// Check and create repeating tasks (NEW)
   Future<void> _checkAndCreateRepeatingTasks() async {
-    final now = DateTime.now();
-    final tasksToProcess = <TaskModel>[];
+    // Mutex: prevent concurrent checks from creating duplicates
+    if (_isCheckingRepeatingTasks) return;
+    _isCheckingRepeatingTasks = true;
 
-    // Collect tasks that need processing
-    for (var task in _tasks) {
-      if (task.isRepeating &&
-          task.status == TaskStatus.completed &&
-          task.nextRepeatDate != null &&
-          task.nextRepeatDate!.isBefore(now)) {
-        tasksToProcess.add(task);
-      }
-    }
+    try {
+      final now = DateTime.now();
+      final tasksToProcess = <TaskModel>[];
 
-    // Process each task (one at a time to prevent race conditions)
-    for (var task in tasksToProcess) {
-      // Double-check from Firestore to prevent duplicates due to stale local cache
-      try {
-        final freshDoc = await _firestore.collection('tasks').doc(task.id).get();
-        if (freshDoc.exists) {
-          final freshData = freshDoc.data()!;
-          final isStillRepeating = freshData['isRepeating'] as bool? ?? false;
-          if (isStillRepeating) {
-            await _createNextRepeatingTask(task);
-          }
+      // Collect tasks that need processing
+      for (var task in _tasks) {
+        if (task.isRepeating &&
+            task.status == TaskStatus.completed &&
+            task.nextRepeatDate != null &&
+            task.nextRepeatDate!.isBefore(now)) {
+          tasksToProcess.add(task);
         }
-      } catch (e) {
-        print('Error checking task for repeat: $e');
       }
+
+      // Process each task (one at a time to prevent race conditions)
+      for (var task in tasksToProcess) {
+        // Double-check from Firestore to prevent duplicates due to stale local cache
+        try {
+          final freshDoc = await _firestore.collection('tasks').doc(task.id).get();
+          if (freshDoc.exists) {
+            final freshData = freshDoc.data()!;
+            final isStillRepeating = freshData['isRepeating'] as bool? ?? false;
+            if (isStillRepeating) {
+              await _createNextRepeatingTask(task);
+            }
+          }
+        } catch (e) {
+          print('Error checking task for repeat: $e');
+        }
+      }
+    } finally {
+      _isCheckingRepeatingTasks = false;
     }
   }
 
@@ -585,18 +594,138 @@ class TaskProvider extends ChangeNotifier {
     final nextDeadline = _calculateNextDeadline(originalTask);
     if (nextDeadline == null) return;
 
-    // IMPORTANT: Check if a pending task with the same parentTaskId already exists
-    // to prevent duplicate creation
     final parentId = originalTask.parentTaskId ?? originalTask.id;
-    final existingPendingTask = _tasks.any((t) =>
-        t.parentTaskId == parentId &&
-        t.id != originalTask.id &&
-        (t.status == TaskStatus.pending || t.status == TaskStatus.inProgress));
 
-    if (existingPendingTask) {
-      print('Skipping duplicate recurring task creation - pending task already exists');
-      return;
+    // === DEDUP CHECK: Query Firestore directly (not just local cache) ===
+    try {
+      final existingQuery = await _firestore
+          .collection('tasks')
+          .where('parentTaskId', isEqualTo: parentId)
+          .where('status', whereIn: ['pending', 'inProgress'])
+          .limit(1)
+          .get();
+
+      if (existingQuery.docs.isNotEmpty) {
+        print('Skipping duplicate recurring task creation - pending task already exists in Firestore');
+        return;
+      }
+    } catch (e) {
+      print('Error checking for existing recurring task: $e');
+      // Fall back to local check
+      final existingLocally = _tasks.any((t) =>
+          t.parentTaskId == parentId &&
+          t.id != originalTask.id &&
+          (t.status == TaskStatus.pending || t.status == TaskStatus.inProgress));
+      if (existingLocally) return;
     }
+
+    // === VACATION CHECK: Filter out employees on vacation for the deadline date ===
+    List<String> filteredAssignedToList = List.from(originalTask.assignedToList);
+    List<String> filteredAssignedToNamesList = List.from(originalTask.assignedToNamesList);
+
+    try {
+      // Query approved fullDayOff requests that may cover the next deadline date
+      final vacationQuery = await _firestore
+          .collection('requests')
+          .where('status', isEqualTo: 'approved')
+          .where('type', isEqualTo: 'fullDayOff')
+          .get();
+
+      final deadlineDate = DateTime(nextDeadline.year, nextDeadline.month, nextDeadline.day);
+
+      // Collect employee IDs who are on vacation on the deadline date
+      final employeesOnVacation = <String>{};
+      for (var doc in vacationQuery.docs) {
+        final data = doc.data();
+        final employeeId = data['employeeId'] as String?;
+        if (employeeId == null) continue;
+
+        // Check if this vacation covers the deadline date
+        final targetDateStr = data['targetDate'] as String?;
+        if (targetDateStr == null) continue;
+        final targetDate = DateTime.parse(targetDateStr);
+        final startDate = DateTime(targetDate.year, targetDate.month, targetDate.day);
+
+        final endDateStr = data['endDate'] as String?;
+        final endDate = endDateStr != null
+            ? DateTime.parse(endDateStr)
+            : targetDate;
+        final endDateNorm = DateTime(endDate.year, endDate.month, endDate.day);
+
+        if (!deadlineDate.isBefore(startDate) && !deadlineDate.isAfter(endDateNorm)) {
+          employeesOnVacation.add(employeeId);
+        }
+      }
+
+      // Filter out employees on vacation
+      if (employeesOnVacation.isNotEmpty) {
+        for (int i = filteredAssignedToList.length - 1; i >= 0; i--) {
+          if (employeesOnVacation.contains(filteredAssignedToList[i])) {
+            print('Skipping employee ${filteredAssignedToNamesList.length > i ? filteredAssignedToNamesList[i] : filteredAssignedToList[i]} - on vacation');
+            filteredAssignedToList.removeAt(i);
+            if (i < filteredAssignedToNamesList.length) {
+              filteredAssignedToNamesList.removeAt(i);
+            }
+          }
+        }
+
+        // Also check the primary assignee
+        if (employeesOnVacation.contains(originalTask.assignedTo) && filteredAssignedToList.isEmpty) {
+          print('All assigned employees are on vacation - skipping recurring task creation');
+          // Still mark the original as non-repeating and set up the chain to continue
+          // by creating a "skipped" entry that will chain to the next occurrence
+          await _firestore.collection('tasks').doc(originalTask.id).update({
+            'isRepeating': false,
+            'nextRepeatDate': null,
+          });
+          // Create a placeholder to keep the chain going: schedule via a future task
+          // that is immediately completed/skipped
+          final skipTask = TaskModel(
+            id: '',
+            title: originalTask.title,
+            description: originalTask.description,
+            storeId: originalTask.storeId,
+            storeName: originalTask.storeName,
+            assignedTo: originalTask.assignedTo,
+            assignedToName: originalTask.assignedToName,
+            assignedToList: originalTask.assignedToList,
+            assignedToNamesList: originalTask.assignedToNamesList,
+            assignedBy: originalTask.assignedBy,
+            assignedByName: originalTask.assignedByName,
+            createdAt: DateTime.now(),
+            deadline: nextDeadline,
+            maxDurationMinutes: originalTask.maxDurationMinutes,
+            status: TaskStatus.cancelled,
+            priority: originalTask.priority,
+            repeatType: originalTask.repeatType,
+            parentTaskId: parentId,
+            isRepeating: true,
+            nextRepeatDate: _calculateNextRepeatDate(nextDeadline, originalTask.repeatType),
+            repeatTime: originalTask.repeatTime,
+            repeatNotificationEnabled: originalTask.repeatNotificationEnabled,
+          );
+          final docRef = await _firestore.collection('tasks').add(skipTask.toJson());
+          await docRef.update({'id': docRef.id});
+          // Update local
+          final idx = _tasks.indexWhere((t) => t.id == originalTask.id);
+          if (idx != -1) {
+            _tasks[idx] = _tasks[idx].copyWith(isRepeating: false, nextRepeatDate: null);
+          }
+          return;
+        }
+      }
+    } catch (e) {
+      print('Error checking vacation status for recurring task: $e');
+      // Continue without filtering on error
+    }
+
+    // Determine primary assignee (use first from filtered list)
+    final primaryAssignedTo = filteredAssignedToList.isNotEmpty
+        ? filteredAssignedToList.first
+        : originalTask.assignedTo;
+    final primaryAssignedToName = filteredAssignedToNamesList.isNotEmpty
+        ? filteredAssignedToNamesList.first
+        : originalTask.assignedToName;
 
     final newTask = TaskModel(
       id: '',
@@ -604,10 +733,10 @@ class TaskProvider extends ChangeNotifier {
       description: originalTask.description,
       storeId: originalTask.storeId,
       storeName: originalTask.storeName,
-      assignedTo: originalTask.assignedTo,
-      assignedToName: originalTask.assignedToName,
-      assignedToList: originalTask.assignedToList,
-      assignedToNamesList: originalTask.assignedToNamesList,
+      assignedTo: primaryAssignedTo,
+      assignedToName: primaryAssignedToName,
+      assignedToList: filteredAssignedToList,
+      assignedToNamesList: filteredAssignedToNamesList,
       assignedBy: originalTask.assignedBy,
       assignedByName: originalTask.assignedByName,
       createdAt: DateTime.now(),
