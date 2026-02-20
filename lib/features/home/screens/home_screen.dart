@@ -189,42 +189,18 @@ class _DashboardTabState extends State<DashboardTab> {
                       ),
                     ],
                   ),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: () {
-                          themeProvider.toggleTheme();
-                        },
-                        icon: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          child: Icon(
-                            isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                            key: ValueKey(isDarkMode),
-                            color: isDarkMode ? Colors.yellow : Colors.indigo,
-                          ),
-                        ),
+                  IconButton(
+                    onPressed: () {
+                      themeProvider.toggleTheme();
+                    },
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      child: Icon(
+                        isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                        key: ValueKey(isDarkMode),
+                        color: isDarkMode ? Colors.yellow : Colors.indigo,
                       ),
-                      IconButton(
-                        onPressed: () {},
-                        icon: Stack(
-                          children: [
-                            const Icon(Icons.notifications_outlined),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: AppTheme.accentColor,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),

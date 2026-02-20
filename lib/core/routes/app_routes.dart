@@ -24,6 +24,7 @@ import '../../features/admin/screens/create_edit_shift_screen.dart';
 import '../../features/admin/screens/create_edit_employee_screen.dart';
 import '../../features/admin/screens/create_edit_store_screen.dart';
 import '../../features/admin/screens/add_overtime_screen.dart';
+import '../../features/admin/screens/admin_notifications_screen.dart';
 import '../../features/tasks/screens/edit_task_screen.dart';
 import '../models/user_model.dart';
 import '../models/task_model.dart';
@@ -59,6 +60,7 @@ class AppRoutes {
   static const String createEditStore = '/create-edit-store';
   static const String addOvertime = '/add-overtime';
   static const String editTask = '/edit-task';
+  static const String adminNotifications = '/admin-notifications';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -128,6 +130,8 @@ class AppRoutes {
       case editTask:
         final task = settings.arguments as TaskModel;
         return _buildRoute(EditTaskScreen(task: task));
+      case adminNotifications:
+        return _buildRoute(const AdminNotificationsScreen());
       default:
         return _buildRoute(
           Scaffold(
