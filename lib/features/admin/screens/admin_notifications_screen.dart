@@ -14,13 +14,54 @@ class AdminNotificationsScreen extends StatefulWidget {
 class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // الإشعارات المهمة فقط - استبعاد تسجيل الدخول/الخروج الاعتيادي
+  static const _importantTypes = {
+    'location_alert',
+    'location_warning',
+    'auto_checkout',
+    'auto_checkout_shift_end',
+    'break_overtime_server',
+    'time_off_blocked',
+    'late_checkout_admin',
+    'new_request',
+  };
+
+  bool _isImportantNotification(Map<String, dynamic> data) {
+    final type = data['type'] as String? ?? '';
+
+    // إذا كان النوع من الأنواع المهمة مباشرة
+    if (_importantTypes.contains(type)) return true;
+
+    // تسجيل حضور متأخر = مهم
+    if (type == 'employee_checkin') {
+      final isLate = data['isLate'] as bool? ?? false;
+      final lateMinutes = data['lateMinutes'] as int? ?? 0;
+      return isLate || lateMinutes > 0;
+    }
+
+    // تسجيل انصراف مبكر = مهم
+    if (type == 'employee_checkout') {
+      final isEarlyLeave = data['isEarlyLeave'] as bool? ?? false;
+      final earlyLeaveMinutes = data['earlyLeaveMinutes'] as int? ?? 0;
+      return isEarlyLeave || earlyLeaveMinutes > 0;
+    }
+
+    // عودة للموقع بعد تنبيه = مهم
+    if (type == 'location_return') return true;
+
+    // أي نوع غير معروف - اعرضه احتياطاً
+    if (type != 'employee_checkin' && type != 'employee_checkout') return true;
+
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('الإشعارات'),
+        title: const Text('الإشعارات المهمة'),
         centerTitle: true,
         actions: [
           IconButton(
@@ -45,7 +86,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               .collection('notifications')
               .where('forAdmin', isEqualTo: true)
               .orderBy('createdAt', descending: true)
-              .limit(100)
+              .limit(200)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
@@ -71,20 +112,32 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
               );
             }
 
-            final docs = snapshot.data?.docs ?? [];
+            // تصفية الإشعارات - فقط المهمة
+            final allDocs = snapshot.data?.docs ?? [];
+            final importantDocs = allDocs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              return _isImportantNotification(data);
+            }).toList();
 
-            if (docs.isEmpty) {
+            if (importantDocs.isEmpty) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.notifications_off,
-                        size: 60, color: Colors.grey.withOpacity(0.5)),
+                    Icon(Icons.check_circle_outline,
+                        size: 60, color: Colors.green.withOpacity(0.5)),
                     const SizedBox(height: 16),
                     Text(
-                      'لا توجد إشعارات',
+                      'لا توجد إشعارات مهمة',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: Colors.grey,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'كل شيء يسير بشكل طبيعي',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.grey.shade500,
                           ),
                     ),
                   ],
@@ -94,9 +147,9 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
             return ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: docs.length,
+              itemCount: importantDocs.length,
               itemBuilder: (context, index) {
-                final doc = docs[index];
+                final doc = importantDocs[index];
                 final data = doc.data() as Map<String, dynamic>;
                 return _buildNotificationCard(context, doc.id, data, isDarkMode);
               },
@@ -114,7 +167,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final body = data['body'] as String? ?? '';
     final isRead = data['read'] as bool? ?? false;
     final createdAt = _parseTimestamp(data['createdAt']);
-    final info = _getNotificationTypeInfo(type);
+    final info = _getNotificationTypeInfo(type, data);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -239,19 +292,21 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     );
   }
 
-  _NotificationTypeInfo _getNotificationTypeInfo(String type) {
+  _NotificationTypeInfo _getNotificationTypeInfo(String type, [Map<String, dynamic>? data]) {
     switch (type) {
       case 'employee_checkin':
+        // حضور متأخر فقط يظهر هنا
         return _NotificationTypeInfo(
-          icon: Icons.login,
-          color: AppTheme.successColor,
-          label: 'تسجيل حضور',
+          icon: Icons.warning_amber,
+          color: AppTheme.warningColor,
+          label: 'حضور متأخر',
         );
       case 'employee_checkout':
+        // انصراف مبكر فقط يظهر هنا
         return _NotificationTypeInfo(
-          icon: Icons.logout,
-          color: Colors.blue,
-          label: 'تسجيل انصراف',
+          icon: Icons.running_with_errors,
+          color: Colors.deepOrange,
+          label: 'انصراف مبكر',
         );
       case 'location_alert':
         return _NotificationTypeInfo(
