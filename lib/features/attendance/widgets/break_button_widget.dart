@@ -9,12 +9,14 @@ class BreakButtonWidget extends StatefulWidget {
   final AttendanceModel attendance;
   final String userId;
   final String userName;
+  final bool compactMode;
 
   const BreakButtonWidget({
     super.key,
     required this.attendance,
     required this.userId,
     required this.userName,
+    this.compactMode = false,
   });
 
   @override
@@ -47,6 +49,7 @@ class _BreakButtonWidgetState extends State<BreakButtonWidget> {
   Widget build(BuildContext context) {
     // Check if break was already taken today (from attendance record)
     if (widget.attendance.breakEndTime != null) {
+      if (widget.compactMode) return const SizedBox.shrink();
       return _buildBreakCompletedCard(context);
     }
 
@@ -57,6 +60,11 @@ class _BreakButtonWidgetState extends State<BreakButtonWidget> {
 
     if (_breakService.hasPendingRequest) {
       return _buildPendingRequestCard(context);
+    }
+
+    // In compact mode, show the request button inline
+    if (widget.compactMode) {
+      return const SizedBox.shrink();
     }
 
     return _buildRequestBreakButton(context);

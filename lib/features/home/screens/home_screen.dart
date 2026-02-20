@@ -15,6 +15,8 @@ import '../../../core/providers/request_provider.dart';
 import '../../../core/routes/app_routes.dart' show AppRoutes;
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/glass_container.dart';
+import '../../../core/models/attendance_model.dart';
+import '../../../core/services/break_service.dart';
 import '../../../core/services/location_monitor_service.dart';
 import '../../../core/services/time_off_monitor_service.dart';
 import '../../tasks/screens/tasks_screen.dart';
@@ -344,18 +346,9 @@ class _DashboardTabState extends State<DashboardTab> {
               // Today's Status
               if (attendanceProvider.isCheckedIn && attendanceProvider.currentSession != null) ...[
                 _buildTodayStatus(context, attendanceProvider, isDarkMode),
-                const SizedBox(height: 15),
-
-                // Break Button - shows during active attendance
-                if (user != null)
-                  BreakButtonWidget(
-                    attendance: attendanceProvider.currentSession!,
-                    userId: user.id,
-                    userName: user.name,
-                  ),
                 const SizedBox(height: 25),
               ],
-              
+
               // Quick Stats
               Text(
                 'إحصائيات سريعة',
@@ -426,7 +419,7 @@ class _DashboardTabState extends State<DashboardTab> {
               
               const SizedBox(height: 25),
 
-              // NEW: Quick Actions Section
+              // Quick Actions Section
               Text(
                 'إجراءات سريعة',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -436,7 +429,7 @@ class _DashboardTabState extends State<DashboardTab> {
 
               const SizedBox(height: 15),
 
-              // Quick action buttons - direct navigation to create request
+              // Quick action buttons row
               Row(
                 children: [
                   Expanded(
@@ -446,7 +439,6 @@ class _DashboardTabState extends State<DashboardTab> {
                       Icons.event_busy,
                       AppTheme.accentColor,
                       onTap: () {
-                        // Navigate directly to create request with fullDayOff type
                         Navigator.pushNamed(
                           context,
                           AppRoutes.createRequest,
@@ -455,7 +447,7 @@ class _DashboardTabState extends State<DashboardTab> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 15),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _buildQuickActionCard(
                       context,
@@ -463,7 +455,6 @@ class _DashboardTabState extends State<DashboardTab> {
                       Icons.timer_outlined,
                       AppTheme.primaryColor,
                       onTap: () {
-                        // Navigate directly to create request with timeOff type
                         Navigator.pushNamed(
                           context,
                           AppRoutes.createRequest,
@@ -472,8 +463,23 @@ class _DashboardTabState extends State<DashboardTab> {
                       },
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildBreakQuickAction(context, attendanceProvider, user),
+                  ),
                 ],
               ),
+
+              // Break status card (when pending/on-break/completed - shows only active states)
+              if (attendanceProvider.isCheckedIn && attendanceProvider.currentSession != null && user != null) ...[
+                const SizedBox(height: 10),
+                BreakButtonWidget(
+                  attendance: attendanceProvider.currentSession!,
+                  userId: user.id,
+                  userName: user.name,
+                  compactMode: true,
+                ),
+              ],
 
               const SizedBox(height: 25),
               
@@ -495,42 +501,170 @@ class _DashboardTabState extends State<DashboardTab> {
     );
   }
 
-  // NEW: Quick Action Card Widget
   Widget _buildQuickActionCard(
     BuildContext context,
     String title,
     IconData icon,
     Color color,
-    {required VoidCallback onTap}
+    {VoidCallback? onTap, bool disabled = false}
   ) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    
+    final effectiveColor = disabled ? Colors.grey : color;
+
     return GlassContainer(
       child: InkWell(
-        onTap: onTap,
+        onTap: disabled ? null : onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 10),
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.2),
+                  color: effectiveColor.withOpacity(disabled ? 0.1 : 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon, color: color, size: 28),
+                child: Icon(icon, color: effectiveColor, size: 24),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Text(
                 title,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: disabled ? Colors.grey : null,
                 ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBreakQuickAction(
+    BuildContext context,
+    AttendanceProvider attendanceProvider,
+    UserModel? user,
+  ) {
+    final isCheckedIn = attendanceProvider.isCheckedIn;
+    final session = attendanceProvider.currentSession;
+
+    // Not checked in - disabled
+    if (!isCheckedIn || session == null || user == null) {
+      return _buildQuickActionCard(
+        context,
+        'استراحة',
+        Icons.coffee,
+        Colors.orange,
+        disabled: true,
+      );
+    }
+
+    // Break already completed
+    if (session.breakEndTime != null) {
+      return _buildQuickActionCard(
+        context,
+        'تم الاستراحة',
+        Icons.check_circle,
+        Colors.green,
+        disabled: true,
+      );
+    }
+
+    // On break
+    if (session.isOnBreak) {
+      return _buildQuickActionCard(
+        context,
+        'في استراحة',
+        Icons.coffee,
+        Colors.deepOrange,
+        disabled: true,
+      );
+    }
+
+    // Can request break - tapping shows dialog via BreakButtonWidget
+    return _buildQuickActionCard(
+      context,
+      'استراحة',
+      Icons.coffee,
+      Colors.orange,
+      onTap: () {
+        _showBreakRequestDialog(context, session, user);
+      },
+    );
+  }
+
+  void _showBreakRequestDialog(
+    BuildContext context,
+    AttendanceModel attendance,
+    UserModel user,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.coffee, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('طلب استراحة'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('هل تريد إرسال طلب استراحة؟'),
+            SizedBox(height: 12),
+            Text('• سيتم إرسال الطلب للمدير للموافقة', style: TextStyle(fontSize: 14)),
+            Text('• مدة الاستراحة: 60 دقيقة', style: TextStyle(fontSize: 14)),
+            Text('• لن يتم تنبيهك بالابتعاد خلال الاستراحة', style: TextStyle(fontSize: 14)),
+            Text('• سيتم تنبيهك قبل 5 دقائق من انتهائها', style: TextStyle(fontSize: 14)),
+            Text(
+              '• سيتم إبلاغ المدير إذا تجاوزت الوقت',
+              style: TextStyle(fontSize: 14, color: Colors.red),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final breakService = BreakService();
+              final success = await breakService.requestBreak(
+                attendanceId: attendance.id,
+                userId: user.id,
+                userName: user.name,
+                storeId: attendance.storeId,
+                storeName: attendance.storeName,
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      success
+                          ? 'تم إرسال طلب الاستراحة - بانتظار موافقة المدير'
+                          : 'فشل في إرسال طلب الاستراحة',
+                    ),
+                    backgroundColor: success ? Colors.blue : Colors.red,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('إرسال الطلب'),
+          ),
+        ],
       ),
     );
   }
